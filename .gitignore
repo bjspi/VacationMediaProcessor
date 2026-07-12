@@ -1,0 +1,77 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python tooling/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache/
+cache/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Virtual environments / packaging
+.venv/
+venv/
+env/
+ENV/
+dist/
+build/
+*.egg-info/
+
+# VacationMediaProcessor generated output
+_VacationMediaProcessor_Work/
+_VacationMediaProcessor_Backup/
+_VacationMediaProcessor_Manifest/
+_VacationMediaProcessor_Temp/
+**/_VacationMediaProcessor_Work/
+**/_VacationMediaProcessor_Backup/
+**/_VacationMediaProcessor_Manifest/
+**/_VacationMediaProcessor_Temp/
+.tmp_xnconvert_test/
+.tmp_discovery_check/
+tmp_gui*.png
+.vmp_settings/
+
+# Gradle / JVM build caches
+.gradle/
+**/.gradle/
+gradle-home/
+.gradle-home/
+GRADLE_USER_HOME/
+out/
+target/
+
+# IDE/editor
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Logs and local temp files
+*.log
+*.tmp
+*.temp
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local spec/plan scratch
+spec.md
+docs/superpowers/
+start_vmp.bat
+
+# Windows shortcuts
+*.lnk

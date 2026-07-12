@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vacation-media-processor"
+version = "0.1.0"
+description = "PyQt6 desktop app for vacation photo/video conversion, metadata cleanup, and timestamp-based renaming."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+  "PyQt6>=6.6",
+  "PyQt6-WebEngine>=6.6",
+  "openpyxl>=3.1",
+  "Pillow>=10.0",
+  "pillow-heif>=0.13",
+  "numpy>=1.24",
+]
+
+[project.scripts]
+vacation-media-processor = "vmp.main:main"
+vmp = "vmp.main:main"
+
+[tool.setuptools.packages.find]
+include = ["vmp*"]
+
+[tool.setuptools.package-data]
+vmp = ["assets/*.svg", "assets/*.png", "assets/i18n/*.json"]
