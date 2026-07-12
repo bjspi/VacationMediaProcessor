@@ -17,6 +17,14 @@ Drop a folder in, preview exactly what will happen, and apply it. Originals are 
 
 </div>
 
+<p align="center">
+  <a href="docs/images/main-window.jpg">
+    <img src="docs/images/main-window.jpg" width="100%" alt="VacationMediaProcessor main window — dry-run plan with live preview and per-file evidence">
+  </a>
+  <br>
+  <sub><b>The main window.</b> Every file becomes a reviewable row — status, resolved capture time, timestamp source, planned action, target name, video bucket/CRF and size — next to a live preview and a per-file evidence panel. Nothing is touched until you press <b>Apply</b>.</sub>
+</p>
+
 ---
 
 ## The problem
@@ -66,6 +74,85 @@ Nothing happens blind. Every run starts as a **dry‑run plan** you can inspect 
 
 ### 🌐 "Ich will die Oberfläche auf Deutsch — my friend wants English"
 The UI ships in **German and English**. The language is **auto-detected from the system**, can be pinned in `Settings > Misc > Sprache / Language`, and is stored in the user settings. Translations are plain **JSON language files** under `vmp/assets/i18n/` (`en.json`, …) — drop in another `<code>.json` and it becomes selectable, no code change needed.
+
+## Screenshots
+
+_Click any image to open it full size._
+
+### 🗺️ Trip Lasso — carve trips out of one giant folder
+
+<table>
+<tr>
+<td width="50%" align="center" valign="top">
+<a href="docs/images/trip-lasso-map.jpg"><img src="docs/images/trip-lasso-map.jpg" width="100%" alt="Trip Lasso — polygon selection on the map"></a>
+<br><sub><b>Draw a polygon on the map.</b> Photos are plotted by GPS; media without GPS in the same time window is pulled in automatically, and a target folder name is suggested via reverse geocoding.</sub>
+</td>
+<td width="50%" align="center" valign="top">
+<a href="docs/images/trip-lasso-histogram.jpg"><img src="docs/images/trip-lasso-histogram.jpg" width="100%" alt="Trip Lasso — day selection on the date histogram"></a>
+<br><sub><b>Or pick days on the histogram.</b> Click-and-drag across the day bars to grab a date range, review the thumbnail strip, then move or copy exactly those files into a subfolder.</sub>
+</td>
+</tr>
+</table>
+
+### 👯 Pair Cleanup — clear iPhone/burst duplicates
+
+<table>
+<tr>
+<td width="50%" align="center" valign="top">
+<a href="docs/images/pair-cleanup-crops.jpg"><img src="docs/images/pair-cleanup-crops.jpg" width="100%" alt="Pair Cleanup — crop pairs pixel-verified as contained in the original"></a>
+<br><sub><b>Crop pairs are pixel-verified.</b> Each <code>IMG_E</code> edit is checked to be fully contained in the original via normalized cross-correlation (NCC ≈ 1.00) and pre-selected — one click sweeps them all.</sub>
+</td>
+<td width="50%" align="center" valign="top">
+<a href="docs/images/pair-cleanup-portraits.jpg"><img src="docs/images/pair-cleanup-portraits.jpg" width="100%" alt="Pair Cleanup — portrait/blur pairs are never auto-selected"></a>
+<br><sub><b>Portrait/blur pairs are never auto-selected.</b> Same size, genuinely different look (real Portrait-mode bokeh) — you keep the original, the edit, or both, per pair.</sub>
+</td>
+</tr>
+<tr>
+<td colspan="2" align="center" valign="top">
+<a href="docs/images/pair-cleanup-compare.jpg"><img src="docs/images/pair-cleanup-compare.jpg" width="82%" alt="Pair Cleanup — side-by-side full-image comparison viewer"></a>
+<br><sub><b>Click a thumbnail to compare both full images side by side.</b> One button keeps only the version you pick; another opens it in your default app. Nothing is hard-deleted — cleared files move to a backup folder.</sub>
+</td>
+</tr>
+</table>
+
+### 🎛️ Full control over quality &amp; metadata
+
+<table>
+<tr>
+<td colspan="2" align="center" valign="top">
+<a href="docs/images/video-quality-buckets.jpg"><img src="docs/images/video-quality-buckets.jpg" width="100%" alt="Per-resolution video CRF buckets shown in the plan"></a>
+<br><sub><b>Per-resolution video quality.</b> Clips are bucketed FHD/QHD/4K each with its own CRF (e.g. <code>4K / CRF 28</code>, <code>x265 [4K]</code>), HEIC→JPEG keeps a separate quality, and capture metadata is preserved throughout.</sub>
+</td>
+</tr>
+<tr>
+<td width="42%" align="center" valign="top">
+<a href="docs/images/workflow-settings.jpg"><img src="docs/images/workflow-settings.jpg" width="86%" alt="Workflow settings side panel with inline tooltips"></a>
+<br><sub><b>The workflow panel.</b> HEIC/PNG conversion, depth handling, per-bucket CRF, Full-HD cap, apply mode, metadata checks and backups — every knob for the run, with inline tooltips.</sub>
+</td>
+<td width="58%" align="center" valign="top">
+<a href="docs/images/column-filter.jpg"><img src="docs/images/column-filter.jpg" width="62%" alt="Excel-style column filter popup"></a>
+<br><sub><b>Excel-style column filters.</b> Click any header to filter by text or a value list — e.g. show only videos, only <code>WARN</code> rows, or a single bucket.</sub>
+<br><br>
+<a href="docs/images/depth-map-preserve.jpg"><img src="docs/images/depth-map-preserve.jpg" width="92%" alt="Evidence panel showing a depth-bearing HEIC kept as HEIC"></a>
+<br><sub><b>Depth maps are handled with care.</b> Depth-bearing HEICs can be <b>kept as HEIC</b> (renamed/normalized only) so the Portrait depth map survives — the evidence panel spells out exactly what will happen.</sub>
+</td>
+</tr>
+</table>
+
+### ✨ Little touches
+
+<table>
+<tr>
+<td width="50%" align="center" valign="top">
+<a href="docs/images/gps-google-maps.jpg"><img src="docs/images/gps-google-maps.jpg" alt="Tooltip: double-click a GPS cell to open Google Maps"></a>
+<br><sub><b>GPS → Google Maps.</b> Double-click a file's GPS cell to open the exact location in Google Maps.</sub>
+</td>
+<td width="50%" align="center" valign="top">
+<a href="docs/images/missing-exif.jpg"><img src="docs/images/missing-exif.jpg" alt="Toolbar button with badge: show files without a core EXIF date"></a>
+<br><sub><b>Find missing dates.</b> A badge on the toolbar shows how many files lack a core EXIF capture date — one click lists them.</sub>
+</td>
+</tr>
+</table>
 
 ## At a glance
 
