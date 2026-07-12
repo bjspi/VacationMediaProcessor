@@ -41,6 +41,10 @@ Reads the *real* capture time from EXIF / QuickTime / GPS / filename, resolves t
 ### 🗜️ "My photos and videos are way too big"
 Converts HEIC/HEIF (and optionally PNG) to JPEG, and transcodes videos to modern **HEVC/x265** with per‑resolution quality (FHD/QHD/4K) — optionally capping oversized clips at Full HD. HEIC/HEIF conversion has its **own separate JPEG quality** slider, independent of the JPEG‑source quality, so you can trade size vs. fidelity differently for each. Phone "x265" clips are re‑encoded properly too, because real‑time phone encoding is far from optimal.
 
+**One pass, per-resolution — something HandBrake and Shutter Encoder can't do.** Neither of them lets you assign a *separate CRF per source resolution*, or downscale 4K → Full HD *with its own quality target*, in a single batch pass — you'd script it or queue each resolution by hand. Here FHD/QHD/4K each carry their own CRF, oversized clips are capped to Full HD on the way through, and every clip is handled in the same run. → **[See the per-resolution buckets ↓](#video-quality)**
+
+**Verify the compression in one click.** Wire [`video-compare`](https://github.com/pixop/video-compare) in as the video diff tool (just like Beyond Compare for images): after processing, clicking a file's **size** plays the original and the transcode **side by side**, so you can judge the before/after quality instantly.
+
 **Portrait/depth photos are handled with care.** Optionally **keep depth‑bearing HEICs as HEIC** (still renamed/normalized) so the iPhone Portrait depth map survives, or convert them and **embed the depth map into the JPEG as Google GDepth** so later bokeh edits stay possible.
 
 ### 🌍 "The timestamps are just wrong"
@@ -52,6 +56,8 @@ Removes Samsung motion‑photo trailers, depth‑map cruft, and other unwanted t
 ### 🗺️ "One giant folder — I want to split it into separate trips"
 Open the **Trip Lasso**: draw a polygon on a **map** (photos plotted by GPS), and/or pick days on an interactive **date histogram** (click‑and‑drag to select date ranges). Review the matches as a **thumbnail strip**, then **move or copy** just those files into a new subfolder — whose name is even suggested via reverse geocoding. Perfect for untangling a year‑end dump into per‑trip folders.
 
+→ **[See the Trip Lasso in action ↓](#trip-lasso)**
+
 ### 👯 "Burst mode and iPhone edits dumped duplicate pairs on me"
 Yo — do you also get **HEIC files with the same capture time** (hello, burst mode) or those weird `IMG_Exxxx` **edited/cropped copies** the iPhone transfers next to every `IMG_xxxx` (a 9:16 crop you never asked for)… and just want to declutter your albums *fast*? Open the **Pair Cleanup** tool (toolbar button with a live **count badge**):
 
@@ -60,6 +66,8 @@ Yo — do you also get **HEIC files with the same capture time** (hello, burst m
 - **Portrait/blur pairs** (same size, genuinely different look — real iPhone Portrait‑mode bokeh) are shown but **never auto‑selected**; you keep the original, the edited one, or both, per pair.
 - **Click a thumbnail** to compare **both full images side by side** (the original fills the frame, the crop shows exactly what was trimmed); **click the filename** to open it in your default app.
 - Nothing is hard‑deleted: cleared files move into a `_VacationMediaProcessor_PairCleanup/` backup folder.
+
+→ **[See Pair Cleanup in action ↓](#pair-cleanup)**
 
 ### 🔁 "Some photos are sideways / thumbnails are stale"
 The standalone **JPG Fix** losslessly rotates JPEGs to their EXIF orientation (no re‑encode, no quality loss) and rebuilds the embedded EXIF thumbnail — independent of the full normalize pass.
@@ -79,6 +87,8 @@ The UI ships in **German and English**. The language is **auto-detected from the
 
 _Click any image to open it full size._
 
+<a id="trip-lasso"></a>
+
 ### 🗺️ Trip Lasso — carve trips out of one giant folder
 
 <table>
@@ -93,6 +103,8 @@ _Click any image to open it full size._
 </td>
 </tr>
 </table>
+
+<a id="pair-cleanup"></a>
 
 ### 👯 Pair Cleanup — clear iPhone/burst duplicates
 
@@ -114,6 +126,8 @@ _Click any image to open it full size._
 </td>
 </tr>
 </table>
+
+<a id="video-quality"></a>
 
 ### 🎛️ Full control over quality &amp; metadata
 
@@ -242,7 +256,7 @@ The automatic pipeline calls these command‑line tools (paths configurable in t
 - **FFmpeg** / **FFprobe** — video transcode & probing
 - **NConvert** (XnConvert‑compatible CLI) — image conversion & JPG Fix
 
-The settings dialog splits tools into **CMD Tools** (pipeline), **Difftools** (image/video/text diff templates using `$source`/`$target`), and **Standalone GUI Tools** (manual launchers for XnConvert, XnView MP, Shutter Encoder). Diff tools are backup‑aware: a media diff only appears when the original backup exists and the matching template is configured.
+The settings dialog splits tools into **CMD Tools** (pipeline), **Difftools** (image/video/text diff templates using `$source`/`$target`), and **Standalone GUI Tools** (manual launchers for XnConvert, XnView MP, Shutter Encoder). Diff tools are backup‑aware: a media diff only appears when the original backup exists and the matching template is configured. A great pairing: [`video-compare`](https://github.com/pixop/video-compare) as the **video** diff and Beyond Compare as the **image** diff — then a single click on a processed file's size gives you an instant before/after.
 
 ## Outputs
 
