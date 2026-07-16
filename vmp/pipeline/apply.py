@@ -35,6 +35,8 @@ from ..core.models import (
 )
 from .shared import (
     ApplyItemCallback,
+    CancelCallback,
+    PipelineCancelled,
     PipelineError,
     ProgressCallback,
     VideoNotSmallerError,
@@ -43,6 +45,7 @@ from .shared import (
     backup_dir,
     emit,
     make_run_id,
+    raise_if_cancelled,
     work_dir,
 )
 from ..planner import crf_for_video, effective_video_bucket, video_downscale_target
@@ -69,6 +72,15 @@ class _ApplyOutcome:
 
 def _record_outcome(report: PipelineReport, outcome: _ApplyOutcome) -> None:
     """Merge one apply outcome into the shared report."""
+    # The worker owns a deep copy of the plans. Keep that copy pointed at what
+    # actually exists so run/readback manifests never claim that a failed target
+    # was created.
+    if outcome.changed and outcome.final_path is not None:
+        outcome.plan.final_path = outcome.final_path
+    elif outcome.source.exists():
+        outcome.plan.final_path = outcome.source
+    else:
+        outcome.plan.final_path = None
     if outcome.errors:
         report.errors.extend(outcome.errors)
     if outcome.warnings:
@@ -102,6 +114,14 @@ def _emit_item_update(callback: ApplyItemCallback | None, run_id: str, outcome: 
         callback(_item_update_from_outcome(run_id, outcome))
 
 
+def _same_path(left: Path, right: Path) -> bool:
+    """Compare two paths using resolved, Windows-friendly semantics."""
+    try:
+        return left.resolve() == right.resolve()
+    except OSError:
+        return left == right
+
+
 
 def _apply_one_plan(
     plan: MediaPlan,
@@ -114,6 +134,7 @@ def _apply_one_plan(
     total_video_seconds: float = 0.0,
     video_durations: dict[Path, float] | None = None,
     backup_lock: Lock | None = None,
+    cancel_callback: CancelCallback | None = None,
 ) -> _ApplyOutcome:
     """Apply one plan and capture the result without touching shared report state."""
     source = plan.analysis.item.path
@@ -122,6 +143,9 @@ def _apply_one_plan(
     backup = backup_dir(item_root, run_id)
     outcome = _ApplyOutcome(plan=plan, source=source)
     try:
+        if cancel_callback is not None and cancel_callback():
+            outcome.skipped = True
+            return outcome
         try:
             outcome.original_size = source.stat().st_size
         except OSError:
@@ -140,6 +164,10 @@ def _apply_one_plan(
             LOGGER.info("Apply item skipped because final_path is None: %s", source)
             outcome.skipped = True
             return outcome
+        if not _same_path(final_path, source) and final_path.exists():
+            # Planning is a snapshot. A file can appear at the chosen target
+            # before Apply; reject it before metadata writes or conversions.
+            raise PipelineError(f"Final path already exists, refusing to overwrite: {final_path}")
         emit(callback, Phase.VIDEO_TRANSCODE, index - 1, total, f"Preparing {source.name}")
         output = _produce_output(
             plan,
@@ -157,7 +185,11 @@ def _apply_one_plan(
             LOGGER.info("Apply item skipped because no output was produced: %s", source)
             outcome.skipped = True
             return outcome
-        outcome.final_path = final_path
+        if cancel_callback is not None and cancel_callback():
+            if not _same_path(output, source):
+                output.unlink(missing_ok=True)
+            outcome.skipped = True
+            return outcome
         if settings.skip_backup:
             LOGGER.warning("Backup skipped by user setting for source=%s", source)
         else:
@@ -166,12 +198,19 @@ def _apply_one_plan(
             else:
                 with backup_lock:
                     outcome.backup_path = _backup_source(source, item_root, backup)
+        if cancel_callback is not None and cancel_callback():
+            if not _same_path(output, source):
+                output.unlink(missing_ok=True)
+            outcome.skipped = True
+            return outcome
         if output == source:
             emit(callback, Phase.METADATA_WRITE, index, total, f"Writing metadata: {source.name}")
             LOGGER.info("Writing metadata in-place source=%s final=%s", source, final_path)
             write_metadata(plan.analysis, source, settings)
-            if final_path != source:
+            if not _same_path(final_path, source):
                 final_path.parent.mkdir(parents=True, exist_ok=True)
+                if final_path.exists():
+                    raise PipelineError(f"Final path already exists, refusing to overwrite: {final_path}")
                 LOGGER.info("Moving source to final path: %s -> %s", source, final_path)
                 shutil.move(str(source), str(final_path))
         else:
@@ -188,7 +227,7 @@ def _apply_one_plan(
             ):
                 embed_gdepth(source, output, settings)
             final_path.parent.mkdir(parents=True, exist_ok=True)
-            if final_path.resolve() == source.resolve():
+            if _same_path(final_path, source):
                 LOGGER.info("Replacing original with output: %s -> %s", output, final_path)
                 output.replace(final_path)
             else:
@@ -203,7 +242,16 @@ def _apply_one_plan(
                     raise PipelineError(f"Expected final file was not created: {final_path}")
                 if source.exists():
                     LOGGER.info("Removing original source after replacement: %s", source)
-                    source.unlink()
+                    try:
+                        source.unlink()
+                    except OSError as exc:
+                        # The intended final file is already complete. Keeping an
+                        # extra original is recoverable and safer than reporting
+                        # the whole transformed item as if it had failed.
+                        warning = f"Could not remove replaced original {source}: {exc}"
+                        LOGGER.warning(warning)
+                        outcome.warnings.append(warning)
+        outcome.final_path = final_path
         outcome.changed = True
         try:
             outcome.current_size = final_path.stat().st_size
@@ -240,6 +288,7 @@ def apply_plans(
     settings: AppSettings,
     callback: ProgressCallback | None = None,
     item_callback: ApplyItemCallback | None = None,
+    cancel_callback: CancelCallback | None = None,
 ) -> PipelineReport:
     """Apply enabled plans using backup and work directories.
 
@@ -251,6 +300,7 @@ def apply_plans(
     the primary root.
     """
     normalized_root = normalize_root(root)
+    raise_if_cancelled(cancel_callback)
     LOGGER.info("Apply requested for root=%s incoming_plans=%s", normalized_root, len(plans))
     _preflight_apply_tools(plans, settings)
     run_id = make_run_id()
@@ -291,9 +341,11 @@ def apply_plans(
                         index,
                         image_total,
                         backup_lock=backup_lock,
+                        cancel_callback=cancel_callback,
                     )
                     _record_outcome(report, outcome)
                     _emit_item_update(item_callback, run_id, outcome)
+                    raise_if_cancelled(cancel_callback)
                     emit(
                         callback,
                         Phase.IMAGE_CONVERSION,
@@ -318,11 +370,13 @@ def apply_plans(
                             0.0,
                             None,
                             backup_lock,
+                            cancel_callback,
                         ): plan
                         for index, plan in enumerate(image_plans, start=1)
                     }
                     completed = 0
                     for future in as_completed(futures):
+                        raise_if_cancelled(cancel_callback)
                         plan = futures[future]
                         try:
                             outcome = future.result()
@@ -354,9 +408,12 @@ def apply_plans(
                 tr("Bilder werden verarbeitet ({done}/{total})").format(done=image_total, total=image_total),
             )
 
+        raise_if_cancelled(cancel_callback)
+
         total_video_seconds = 0.0
         video_durations: dict[Path, float] = {}
         for vp in video_plans:
+            raise_if_cancelled(cancel_callback)
             try:
                 probe = probe_video(vp.analysis.item.path, settings)
                 fmt = probe.get("format", {})
@@ -380,9 +437,11 @@ def apply_plans(
                 total_video_seconds,
                 video_durations,
                 backup_lock,
+                cancel_callback,
             )
             _record_outcome(report, outcome)
             _emit_item_update(item_callback, run_id, outcome)
+            raise_if_cancelled(cancel_callback)
 
         manifest_dir = normalized_root / "_VacationMediaProcessor_Manifest"
         manifest_path = manifest_dir / f"{run_id}.json"
@@ -449,9 +508,11 @@ def maintain_jpegs(
     root: Path,
     settings: AppSettings,
     callback: ProgressCallback | None = None,
+    cancel_callback: CancelCallback | None = None,
 ) -> PipelineReport:
     """Run the standalone JPEG thumbnail/orientation maintenance workflow."""
     normalized_root = normalize_root(root)
+    raise_if_cancelled(cancel_callback)
     LOGGER.info("JPEG maintenance requested for root=%s", normalized_root)
     _resolve_required_tool("NConvert", settings.tools.xnconvert)
     if not settings.images.jpeg_rotate_by_exif and not settings.images.jpeg_rebuild_exif_thumbnail:
@@ -469,6 +530,7 @@ def maintain_jpegs(
     LOGGER.info("JPEG maintenance run_id=%s items=%s work=%s backup=%s", run_id, total, work, backup)
     emit(callback, Phase.DISCOVERY, total, total, f"Found {total} JPEG files.")
     for index, item in enumerate(items, start=1):
+        raise_if_cancelled(cancel_callback)
         source = item.path
         target = work / item.relative_path
         try:
@@ -481,10 +543,15 @@ def maintain_jpegs(
                 LOGGER.warning("Backup skipped by user setting for JPEG source=%s", source)
             else:
                 _backup_source(source, normalize_root(item.root), backup)
+            if cancel_callback is not None and cancel_callback():
+                target.unlink(missing_ok=True)
+                raise PipelineCancelled("Processing was cancelled.")
             target.replace(source)
             report.changed += 1
             LOGGER.info("JPEG maintenance item completed: %s", source)
             emit(callback, Phase.JPEG_MAINTENANCE, index, total, f"Fixed JPEG: {source.name}")
+        except PipelineCancelled:
+            raise
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("JPEG maintenance item failed: %s", source)
             report.errors.append(f"{source}: {exc}")
@@ -646,6 +713,7 @@ def _produce_output(
         threshold_bytes = settings.videos.always_replace_below_mb * 1024 * 1024
         is_small = source_size < threshold_bytes
         if not settings.videos.replace_if_larger and target_size > source_size and not is_small:
+            temp_target.unlink(missing_ok=True)
             raise VideoNotSmallerError("Encoded video is larger than the source; original kept.")
         if target_size > source_size and is_small:
             LOGGER.info("Output larger than source but below threshold (%s MB < %s MB), keeping output", source_size // (1024*1024), settings.videos.always_replace_below_mb)

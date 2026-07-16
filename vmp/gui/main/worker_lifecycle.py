@@ -67,17 +67,19 @@ class WorkerLifecycleMixin:
         return False
 
     def _abort_running_work(self) -> None:
-        """Forcefully stop active child processes and let the worker unwind."""
-        killed = kill_active_processes()
-        LOGGER.warning("Abort requested: killed %s external process(es)", killed)
+        """Cancel cooperatively, kill child tools, and wait for safe unwind."""
         if self.worker_thread is None:
+            kill_active_processes()
             return
         self.worker_thread.requestInterruption()
+        killed = kill_active_processes()
+        LOGGER.warning("Abort requested: killed %s external process(es)", killed)
         self.worker_thread.quit()
-        if not self.worker_thread.wait(2000):
-            LOGGER.warning("Worker thread still running after abort wait, terminating it")
-            self.worker_thread.terminate()
-            self.worker_thread.wait(1000)
+        while self.worker_thread.isRunning() and not self.worker_thread.wait(1000):
+            # QThread.terminate() can cut through a backup, rename, or metadata
+            # write. Keep the close path blocked until the worker reaches one of
+            # the cooperative cancellation boundaries instead.
+            LOGGER.warning("Waiting for worker thread to stop safely after cancellation")
 
     def on_progress(self, event: PipelineProgress) -> None:
         """Update progress controls."""

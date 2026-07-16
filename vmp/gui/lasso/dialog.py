@@ -35,7 +35,6 @@ from .ui import build_lasso_ui
 from .thumb_strip import THUMB_DEFAULT_SIZE, THUMB_MAX, THUMB_MIN, ThumbStrip
 from .transfer_worker import TransferWorker
 from .histogram import DayHistogramWidget
-from .map_view import webengine_available
 from ..common.thumbnails import (
     ThumbnailService,
     ThumbRelay,

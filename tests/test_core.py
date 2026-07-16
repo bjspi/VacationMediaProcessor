@@ -10,7 +10,7 @@ import unittest
 from concurrent.futures import Future
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -31,6 +31,7 @@ from vmp.core.models import (
     MediaKind,
     AnalysisResult,
     MediaPlan,
+    PlannedAction,
     PlanStatus,
     RawMetadata,
     ResolvedTimestamp,
@@ -1005,6 +1006,138 @@ class MainWindowPostApplyTests(unittest.TestCase):
         populate_table.assert_not_called()
         refresh_workflow_columns.assert_called_once()
 
+    def test_tolerance_change_reanalyzes_existing_scan_results(self) -> None:
+        """The live tolerance control must update WARN/OK decisions without a rescan."""
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        app = QApplication.instance() or QApplication([])
+        self.assertIsNotNone(app)
+        with patch("vmp.gui.main.window.load_settings", return_value=AppSettings()), patch(
+            "vmp.gui.main.window.configure_logging", return_value=Path("log.txt")
+        ), patch("vmp.gui.main.window.setup_gui_logging"), patch(
+            "vmp.gui.main.window.resolve_executable", return_value="tool"
+        ), patch("vmp.gui.main.window.save_settings"):
+            window = MainWindow()
+        root = Path.cwd()
+        item = MediaItem(root / "photo.jpg", root, MediaKind.IMAGE)
+        raw = RawMetadata(
+            str(item.path),
+            {
+                "EXIF:DateTimeOriginal": "2026:01:02 03:04:05",
+                "EXIF:CreateDate": "2026:01:02 03:05:05",
+            },
+        )
+        initial = analyze_item(item, raw, window.settings_model.metadata)
+        self.assertEqual(initial.status, PlanStatus.OK)
+        window.results = [initial]
+
+        window.tolerance_spin.setValue(0)
+        window._apply_workflow_refresh()
+
+        self.assertEqual(window.results[0].status, PlanStatus.WARN)
+        self.assertTrue(any("Conflicting local" in warning for warning in window.results[0].warnings))
+
+    def test_apply_flushes_debounced_workflow_plan_before_starting_worker(self) -> None:
+        """Apply must use the current sidebar settings, never the stale pre-debounce plan."""
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        app = QApplication.instance() or QApplication([])
+        self.assertIsNotNone(app)
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "vmp.gui.main.window.load_settings", return_value=AppSettings()
+        ), patch(
+            "vmp.gui.main.window.configure_logging", return_value=Path("log.txt")
+        ), patch(
+            "vmp.gui.main.window.setup_gui_logging"
+        ), patch(
+            "vmp.gui.main.window.resolve_executable", return_value="tool"
+        ), patch(
+            "vmp.gui.main.window.save_settings"
+        ):
+            root = Path(tmp)
+            source = root / "photo.heic"
+            source.write_bytes(b"image")
+            result = AnalysisResult(
+                item=MediaItem(source, root, MediaKind.IMAGE),
+                metadata=RawMetadata(str(source), {}),
+                resolved=ResolvedTimestamp(datetime(2026, 1, 2, 3, 4, 5), None, None, Confidence.HIGH),
+                status=PlanStatus.OK,
+            )
+            stale = MediaPlan(
+                analysis=result,
+                actions=[PlannedAction(ActionKind.IMAGE_CONVERT, "stale conversion", source)],
+                final_path=root / "20260102_030405.jpg",
+            )
+            current = MediaPlan(
+                analysis=result,
+                actions=[PlannedAction(ActionKind.METADATA_NORMALIZE, "current metadata", source)],
+                final_path=root / "20260102_030405.heic",
+            )
+            window = MainWindow()
+            window.roots = [root]
+            window.results = [result]
+            window.plans = [stale]
+
+            def install_current_plan() -> None:
+                window.plans = [current]
+
+            with patch.object(
+                window, "_refresh_plans_from_results", side_effect=install_current_plan
+            ) as refresh, patch.object(
+                window, "_start_worker"
+            ) as start_worker, patch(
+                "vmp.gui.main.apply_flow.QMessageBox.question",
+                return_value=QMessageBox.StandardButton.Yes,
+            ):
+                window.run_plans([stale], "Apply?")
+
+        refresh.assert_called_once()
+        worker = start_worker.call_args.args[0]
+        self.assertEqual(worker._plans, [current])
+        self.assertEqual(window._applied_plans, [current])
+
+    def test_failed_apply_update_keeps_gui_on_existing_source_path(self) -> None:
+        """A failed target must not replace the GUI's valid source reference."""
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        app = QApplication.instance() or QApplication([])
+        self.assertIsNotNone(app)
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "vmp.gui.main.window.load_settings", return_value=AppSettings()
+        ), patch(
+            "vmp.gui.main.window.configure_logging", return_value=Path("log.txt")
+        ), patch(
+            "vmp.gui.main.window.setup_gui_logging"
+        ), patch(
+            "vmp.gui.main.window.resolve_executable", return_value="tool"
+        ), patch(
+            "vmp.gui.main.window.save_settings"
+        ):
+            root = Path(tmp)
+            source = root / "photo.jpg"
+            target = root / "20260102_030405.jpg"
+            source.write_bytes(b"source")
+            result = AnalysisResult(
+                item=MediaItem(source, root, MediaKind.IMAGE),
+                metadata=RawMetadata(str(source), {}),
+                resolved=ResolvedTimestamp(None, None, None, Confidence.LOW),
+                status=PlanStatus.OK,
+            )
+            window = MainWindow()
+            window.results = [result]
+            window.plans = [MediaPlan(analysis=result, final_path=target)]
+            window.populate_table()
+            window.on_apply_item_updated(
+                ApplyItemUpdate(
+                    run_id="run",
+                    source_path=source,
+                    final_path=None,
+                    skipped=True,
+                    errors=["target appeared"],
+                )
+            )
+
+        self.assertEqual(window.plans[0].final_path, source)
+        self.assertEqual(window.plans[0].analysis.item.path, source)
+        self.assertEqual(window.plans[0].analysis.status, PlanStatus.SKIP)
+
     def test_diff_backup_is_discovered_from_manifest_when_memory_map_is_empty(self) -> None:
         """Diff actions should remain available after a rescan/restart when a backup exists."""
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -1419,6 +1552,93 @@ class ApplyParallelismTests(unittest.TestCase):
         self.assertEqual(call_order, ["img1.jpg", "img2.jpg"])
         self.assertEqual(report.changed, 2)
         self.assertEqual(backup_source.call_count, 2)
+
+    def test_stale_rename_target_is_never_overwritten(self) -> None:
+        """A file created after planning must survive a metadata-only rename apply."""
+        from vmp.pipeline import _apply_one_plan
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "photo.jpg"
+            target = root / "20260102_030405.jpg"
+            source.write_bytes(b"original source")
+            target.write_bytes(b"new unrelated file")
+            plan = self._make_plan(root, source.name, MediaKind.IMAGE)
+            plan.final_path = target
+            settings = AppSettings(skip_backup=True)
+
+            with patch("vmp.pipeline.apply._produce_output") as produce, patch(
+                "vmp.pipeline.apply.write_metadata"
+            ) as write_metadata:
+                outcome = _apply_one_plan(plan, settings, "run", None, 1, 1)
+
+            self.assertFalse(outcome.changed)
+            self.assertTrue(outcome.skipped)
+            self.assertIn("refusing to overwrite", outcome.errors[0])
+            self.assertEqual(source.read_bytes(), b"original source")
+            self.assertEqual(target.read_bytes(), b"new unrelated file")
+            produce.assert_not_called()
+            write_metadata.assert_not_called()
+
+    def test_failed_item_readback_uses_actual_source_not_missing_target(self) -> None:
+        """Before/after readback must follow the surviving path after an item failure."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "photo.jpg"
+            target = root / "20260102_030405.jpg"
+            source.write_bytes(b"original source")
+            target.write_bytes(b"new unrelated file")
+            plan = self._make_plan(root, source.name, MediaKind.IMAGE)
+            plan.final_path = target
+            settings = AppSettings(skip_backup=True, read_after_exif=True)
+            settings.images.parallel_workers = 1
+            read_paths: list[Path] = []
+
+            def capture_readback(items, _exiftool):
+                read_paths.extend(item.path for item in items)
+                return {}
+
+            with patch("vmp.pipeline.apply._preflight_apply_tools"), patch(
+                "vmp.pipeline.apply.write_manifest"
+            ), patch(
+                "vmp.pipeline.apply.write_before_after_manifests"
+            ), patch(
+                "vmp.pipeline.apply.read_metadata_batch", side_effect=capture_readback
+            ):
+                report = apply_plans(root, [plan], settings)
+
+        self.assertEqual(len(report.errors), 1)
+        self.assertEqual(read_paths, [source])
+        self.assertEqual(plan.final_path, source)
+
+    def test_cancelled_plan_does_not_start_output_or_file_mutation(self) -> None:
+        """Queued image tasks should become harmless skips after cancellation."""
+        from vmp.pipeline import _apply_one_plan
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = self._make_plan(root, "photo.jpg", MediaKind.IMAGE)
+            plan.analysis.item.path.write_bytes(b"source")
+            with patch("vmp.pipeline.apply._produce_output") as produce, patch(
+                "vmp.pipeline.apply._backup_source"
+            ) as backup, patch(
+                "vmp.pipeline.apply.write_metadata"
+            ) as write_metadata:
+                outcome = _apply_one_plan(
+                    plan,
+                    AppSettings(),
+                    "run",
+                    None,
+                    1,
+                    1,
+                    cancel_callback=lambda: True,
+                )
+
+        self.assertTrue(outcome.skipped)
+        self.assertFalse(outcome.changed)
+        produce.assert_not_called()
+        backup.assert_not_called()
+        write_metadata.assert_not_called()
 
     def test_after_exif_readback_failure_is_reported_without_failing_apply(self) -> None:
         """Post-apply EXIF readback is optional and must not invalidate a completed apply."""
@@ -2050,6 +2270,22 @@ class ReentrancyGuardTests(unittest.TestCase):
         thread_cls.assert_not_called()
         info.assert_called_once()
 
+    def test_abort_waits_for_safe_unwind_without_terminating_qthread(self) -> None:
+        """Closing during Apply must never hard-kill a thread inside file I/O."""
+        window = self._window()
+        thread = MagicMock()
+        thread.isRunning.side_effect = [True, False]
+        thread.wait.return_value = False
+        window.worker_thread = thread
+
+        with patch("vmp.gui.main.worker_lifecycle.kill_active_processes", return_value=2):
+            window._abort_running_work()
+
+        thread.requestInterruption.assert_called_once()
+        thread.quit.assert_called_once()
+        thread.wait.assert_called_once_with(1000)
+        thread.terminate.assert_not_called()
+
 
 class VideoNotSmallerTests(unittest.TestCase):
     """A transcode that is not smaller must be a deliberate skip, not an error."""
@@ -2107,6 +2343,38 @@ class LoggingTests(unittest.TestCase):
         from vmp.core.logging_config import _log_filename
 
         self.assertEqual(_log_filename(), f"vmp.{os.getpid()}.log")
+
+    def test_run_ids_include_microseconds_for_same_second_runs(self) -> None:
+        """Fast or concurrent runs must not share work, backup, or manifest paths."""
+        from vmp.pipeline import make_run_id
+
+        with patch("vmp.pipeline.shared.datetime") as mocked_datetime:
+            mocked_datetime.now.side_effect = [
+                datetime(2026, 7, 16, 12, 0, 0, 1),
+                datetime(2026, 7, 16, 12, 0, 0, 2),
+            ]
+            first = make_run_id()
+            second = make_run_id()
+
+        self.assertEqual(first, "20260716_120000_000001")
+        self.assertEqual(second, "20260716_120000_000002")
+        self.assertLess(first, second)
+
+    def test_backup_variant_only_accepts_numeric_collision_suffix(self) -> None:
+        """A similarly named original must not be mistaken for another file's backup."""
+        from vmp.gui.common.backup_discovery import existing_backup_variant
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            requested = root / "photo.jpg"
+            unrelated = root / "photo-edited.jpg"
+            numeric = root / "photo-2.jpg"
+            unrelated.write_bytes(b"wrong")
+
+            self.assertIsNone(existing_backup_variant(requested))
+
+            numeric.write_bytes(b"right")
+            self.assertEqual(existing_backup_variant(requested), numeric)
 
     def test_prune_removes_only_stale_foreign_logs(self) -> None:
         import os

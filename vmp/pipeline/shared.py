@@ -13,11 +13,16 @@ from ..core.processes import resolve_executable
 ProgressCallback = Callable[[PipelineProgress], None]
 ApplyItemCallback = Callable[[ApplyItemUpdate], None]
 ResultsCallback = Callable[[list[AnalysisResult], list[MediaPlan]], None]
+CancelCallback = Callable[[], bool]
 LOGGER = get_logger(__name__)
 
 
 class PipelineError(RuntimeError):
     """Raised when the processing pipeline cannot continue safely."""
+
+
+class PipelineCancelled(PipelineError):
+    """Raised when the GUI requests a cooperative pipeline cancellation."""
 
 
 class VideoNotSmallerError(PipelineError):
@@ -31,8 +36,14 @@ class VideoNotSmallerError(PipelineError):
 
 
 def make_run_id() -> str:
-    """Create a sortable run identifier."""
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
+    """Create a sortable run identifier that does not collide within one second."""
+    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+
+def raise_if_cancelled(callback: CancelCallback | None) -> None:
+    """Abort at a safe pipeline boundary when cancellation was requested."""
+    if callback is not None and callback():
+        raise PipelineCancelled("Processing was cancelled.")
 
 
 def work_dir(root: Path, run_id: str) -> Path:

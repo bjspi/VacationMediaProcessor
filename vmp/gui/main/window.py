@@ -56,6 +56,7 @@ from ...core.models import (
     ResolvedTimestamp,
 )
 from ...reports import export_excel_report, missing_exif_rows
+from ...metadata import analyze_item
 from ...planner import build_plans
 from ...core.i18n import init_language, tr
 from ...core.settings import load_settings, save_settings
@@ -108,6 +109,7 @@ class MainWindow(
         self.results: list[AnalysisResult] = []
         self.plans: list[MediaPlan] = []
         self._applied_plans: list[MediaPlan] = []
+        self._analysis_refresh_pending = False
         self._workflow_refresh_timer = QTimer(self)
         self._workflow_refresh_timer.setSingleShot(True)
         self._workflow_refresh_timer.setInterval(250)
@@ -274,6 +276,26 @@ class MainWindow(
         self.missing_button.setEnabled(bool(actionable_plans))
         self._update_missing_exif_badge()
         self._update_pairs_badge()
+
+    def _reanalyze_results_for_current_settings(self) -> None:
+        """Re-evaluate timestamp resolution after live analysis-setting changes."""
+        refreshed_results: list[AnalysisResult] = []
+        for previous in self.results:
+            if previous.status == PlanStatus.DONE or (
+                previous.status == PlanStatus.SKIP
+                and "ExifTool returned no metadata." in previous.warnings
+            ):
+                refreshed_results.append(previous)
+                continue
+            refreshed = analyze_item(previous.item, previous.metadata, self.settings_model.metadata)
+            # FFprobe may have enriched these fields after the ExifTool analysis;
+            # a pure timestamp re-analysis must not discard that information.
+            refreshed.width = refreshed.width if refreshed.width is not None else previous.width
+            refreshed.height = refreshed.height if refreshed.height is not None else previous.height
+            refreshed.codec = refreshed.codec if refreshed.codec is not None else previous.codec
+            refreshed.has_depth = refreshed.has_depth or previous.has_depth
+            refreshed_results.append(refreshed)
+        self.results = refreshed_results
 
     def _apply_style(self) -> None:
         """Apply the application stylesheet."""

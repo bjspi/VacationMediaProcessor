@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vacation-media-processor"
-version = "0.1.0"
+version = "0.1.1"
 description = "PyQt6 desktop app for vacation photo/video conversion, metadata cleanup, and timestamp-based renaming."
 readme = "README.md"
 license = { file = "LICENSE" }

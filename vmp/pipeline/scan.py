@@ -21,10 +21,12 @@ from ..core.models import (
     RawMetadata,
 )
 from .shared import (
+    CancelCallback,
     ProgressCallback,
     ResultsCallback,
     _resolve_required_tool,
     emit,
+    raise_if_cancelled,
 )
 from ..planner import build_plans
 
@@ -36,9 +38,11 @@ def scan_and_plan(
     settings: AppSettings,
     callback: ProgressCallback | None = None,
     results_callback: ResultsCallback | None = None,
+    cancel_callback: CancelCallback | None = None,
 ) -> tuple[list[AnalysisResult], list[MediaPlan]]:
     """Discover files, read metadata, analyze timestamps, and build plans."""
     normalized_root = normalize_root(root)
+    raise_if_cancelled(cancel_callback)
     LOGGER.info("Starting scan for %s", normalized_root)
     _resolve_required_tool("ExifTool", settings.tools.exiftool)
     items = discover_media(normalized_root, recursive=settings.recursive)
@@ -53,6 +57,7 @@ def scan_and_plan(
     chunks = [(index, items[index : index + chunk_size]) for index in range(0, total, chunk_size)]
     if parallel_batches <= 1 or len(chunks) <= 1:
         for index, chunk in chunks:
+            raise_if_cancelled(cancel_callback)
             emit(
                 callback,
                 Phase.METADATA_SCAN,
@@ -64,6 +69,7 @@ def scan_and_plan(
             )
             LOGGER.info("Reading metadata chunk %s-%s of %s", index + 1, index + len(chunk), total)
             raw_records = read_metadata_batch(chunk, settings.tools.exiftool)
+            raise_if_cancelled(cancel_callback)
             results.extend(_analyze_metadata_chunk(chunk, raw_records, settings))
             if results_callback is not None:
                 results_callback(results.copy(), build_plans(results, settings))
@@ -87,10 +93,16 @@ def scan_and_plan(
         completed_files = 0
         with ThreadPoolExecutor(max_workers=parallel_batches) as executor:
             futures = {
-                executor.submit(read_metadata_batch, chunk, settings.tools.exiftool): (chunk_index, index, chunk)
+                executor.submit(
+                    _read_metadata_chunk,
+                    chunk,
+                    settings.tools.exiftool,
+                    cancel_callback,
+                ): (chunk_index, index, chunk)
                 for chunk_index, (index, chunk) in enumerate(chunks)
             }
             for future in as_completed(futures):
+                raise_if_cancelled(cancel_callback)
                 chunk_index, index, chunk = futures[future]
                 raw_records = future.result()
                 completed[chunk_index] = (index, chunk, raw_records)
@@ -103,10 +115,23 @@ def scan_and_plan(
                 if results_callback is not None:
                     results_callback(results.copy(), build_plans(results, settings))
                 emit(callback, Phase.METADATA_SCAN, completed_files, total, "Metadata scan in progress...")
+    raise_if_cancelled(cancel_callback)
     emit(callback, Phase.PLANNING, total, total, "Building dry-run plan...")
     plans = build_plans(results, settings)
     LOGGER.info("Scan finished for %s with %s results and %s plans", normalized_root, len(results), len(plans))
     return results, plans
+
+
+def _read_metadata_chunk(
+    chunk: list[MediaItem],
+    exiftool: str,
+    cancel_callback: CancelCallback | None,
+) -> dict[Path, RawMetadata]:
+    """Read one scheduled batch only if it has not been cancelled meanwhile."""
+    raise_if_cancelled(cancel_callback)
+    records = read_metadata_batch(chunk, exiftool)
+    raise_if_cancelled(cancel_callback)
+    return records
 
 
 

@@ -191,7 +191,7 @@ def build_workflow_section(window: "MainWindow") -> QWidget:
     window.tolerance_spin.setRange(0, 3600)
     window.tolerance_spin.setValue(window.settings_model.metadata.sanity_tolerance_seconds)
     style_spinbox(window.tolerance_spin, " s")
-    window.tolerance_spin.valueChanged.connect(window._on_workflow_settings_changed)
+    window.tolerance_spin.valueChanged.connect(window._on_analysis_settings_changed)
     window.vacation_span_spin = QSpinBox()
     window.vacation_span_spin.setRange(0, 104)
     window.vacation_span_spin.setValue(window.settings_model.metadata.vacation_span_weeks)
@@ -347,6 +347,11 @@ class WorkflowSettingsMixin:
         """Refresh plans and the action column after live workflow setting changes."""
         self._schedule_workflow_refresh()
 
+    def _on_analysis_settings_changed(self, *_args: object) -> None:
+        """Schedule timestamp re-analysis for settings used during scanning."""
+        self._analysis_refresh_pending = True
+        self._schedule_workflow_refresh()
+
     def _schedule_workflow_refresh(self) -> None:
         """Debounce workflow changes before rebuilding all plans."""
         self._workflow_refresh_timer.start()
@@ -354,6 +359,9 @@ class WorkflowSettingsMixin:
     def _apply_workflow_refresh(self) -> None:
         """Apply the latest workflow settings to the current plan list."""
         self._sync_settings_from_ui()
+        if self._analysis_refresh_pending:
+            self._reanalyze_results_for_current_settings()
+            self._analysis_refresh_pending = False
         self._refresh_plans_from_results()
 
     def _sync_video_bucket_threshold_limits(self, changed: str, value: int) -> None:

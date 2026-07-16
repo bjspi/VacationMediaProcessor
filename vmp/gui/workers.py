@@ -32,7 +32,13 @@ class ScanWorker(QObject):
         """Run the scan task."""
         try:
             LOGGER.info("ScanWorker started for root=%s", self._root)
-            results, plans = scan_and_plan(self._root, self._settings, self._emit_progress, self._emit_partial)
+            results, plans = scan_and_plan(
+                self._root,
+                self._settings,
+                self._emit_progress,
+                self._emit_partial,
+                self._cancel_requested,
+            )
             LOGGER.info("ScanWorker finished with results=%s plans=%s", len(results), len(plans))
             self.finished.emit(results, plans)
         except Exception as exc:  # noqa: BLE001
@@ -46,6 +52,11 @@ class ScanWorker(QObject):
     def _emit_partial(self, results: list[AnalysisResult], plans: list[MediaPlan]) -> None:
         """Forward partial scan results to Qt."""
         self.partial.emit(results, plans)
+
+    def _cancel_requested(self) -> bool:
+        """Return the interruption state of the worker's current QThread."""
+        thread = self.thread()
+        return thread is not None and thread.isInterruptionRequested()
 
 
 class ApplyWorker(QObject):
@@ -82,6 +93,7 @@ class ApplyWorker(QObject):
                 self._settings,
                 self._emit_progress,
                 self._emit_item_update,
+                self._cancel_requested,
             )
             LOGGER.info(
                 "ApplyWorker finished run_id=%s changed=%s skipped=%s errors=%s",
@@ -103,6 +115,11 @@ class ApplyWorker(QObject):
         """Forward per-file apply updates to Qt."""
         self.item_updated.emit(update)
 
+    def _cancel_requested(self) -> bool:
+        """Return the interruption state of the worker's current QThread."""
+        thread = self.thread()
+        return thread is not None and thread.isInterruptionRequested()
+
 
 class JpegMaintenanceWorker(QObject):
     """Worker that repairs JPEG EXIF thumbnails and orientation."""
@@ -121,7 +138,12 @@ class JpegMaintenanceWorker(QObject):
         """Run the JPEG maintenance task."""
         try:
             LOGGER.info("JpegMaintenanceWorker started for root=%s", self._root)
-            report = maintain_jpegs(self._root, self._settings, self._emit_progress)
+            report = maintain_jpegs(
+                self._root,
+                self._settings,
+                self._emit_progress,
+                self._cancel_requested,
+            )
             LOGGER.info(
                 "JpegMaintenanceWorker finished run_id=%s changed=%s skipped=%s errors=%s",
                 report.run_id,
@@ -137,6 +159,11 @@ class JpegMaintenanceWorker(QObject):
     def _emit_progress(self, event: PipelineProgress) -> None:
         """Forward progress events to Qt."""
         self.progress.emit(event)
+
+    def _cancel_requested(self) -> bool:
+        """Return the interruption state of the worker's current QThread."""
+        thread = self.thread()
+        return thread is not None and thread.isInterruptionRequested()
 
 
 __all__ = [

@@ -92,7 +92,11 @@ def existing_backup_variant(path: Path) -> Path | None:
     if not path.parent.exists():
         return None
     candidates = sorted(
-        path.parent.glob(f"{path.stem}-*{path.suffix}"),
+        (
+            candidate
+            for candidate in path.parent.glob(f"{path.stem}-*{path.suffix}")
+            if candidate.stem.removeprefix(f"{path.stem}-").isdigit()
+        ),
         key=_mtime_or_zero,
         reverse=True,
     )

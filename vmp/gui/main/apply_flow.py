@@ -112,7 +112,19 @@ class ApplyFlowMixin:
             return
         if self._block_if_busy():
             return
-        self._sync_settings_from_ui()
+        requested_paths = [path_key(plan.analysis.item.path) for plan in plans]
+        # Sidebar changes are debounced for responsive editing. Apply must flush
+        # that pending rebuild synchronously; otherwise an old conversion plan
+        # can run with the just-changed settings.
+        self._workflow_refresh_timer.stop()
+        self._apply_workflow_refresh()
+        if self.results:
+            current_by_path = {path_key(plan.analysis.item.path): plan for plan in self.plans}
+            plans = [current_by_path[key] for key in requested_paths if key in current_by_path]
+        if not plans:
+            LOGGER.warning("Run plans became empty after synchronizing the workflow plan")
+            QMessageBox.information(self, tr("Nichts ausgewählt"), tr("Keine passenden Pläne ausgewählt."))
+            return
         actionable_count = sum(1 for plan in plans if plan.actions)
         LOGGER.info(
             "Run plans requested plans=%s actionable=%s question=%s exiftool=%s xnconvert=%s ffmpeg=%s",
@@ -159,7 +171,7 @@ class ApplyFlowMixin:
             return
         plan = self.plans[row]
         old_path = plan.analysis.item.path
-        final_path = update.final_path or plan.final_path or old_path
+        final_path = (update.final_path or old_path) if update.changed else old_path
         plan.final_path = final_path
         if update.changed:
             plan.analysis.status = PlanStatus.DONE

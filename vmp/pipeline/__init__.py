@@ -16,6 +16,8 @@ from .apply import (  # noqa: F401
 )
 from .shared import (  # noqa: F401
     ApplyItemCallback,
+    CancelCallback,
+    PipelineCancelled,
     PipelineError,
     ProgressCallback,
     ResultsCallback,
@@ -25,6 +27,7 @@ from .shared import (  # noqa: F401
     backup_dir,
     emit,
     make_run_id,
+    raise_if_cancelled,
     work_dir,
 )
 from .scan import scan_and_plan  # noqa: F401
