@@ -106,8 +106,12 @@ def existing_backup_variant(path: Path) -> Path | None:
 def latest_existing_backup_for_original(root: Path, backup_root: Path, original: Path) -> Path | None:
     """Return the newest backup file for an original path."""
     try:
-        relative = original.relative_to(root)
-    except ValueError:
+        # Windows can expose the same temp/user directory through both an 8.3
+        # short path (RUNNER~1) and its long form (runneradmin). Resolve both
+        # sides before the containment check so manifests remain portable
+        # across those aliases.
+        relative = original.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
         return None
     run_dirs = [path for path in backup_root.iterdir() if path.is_dir()]
     for run_dir in sorted(run_dirs, key=lambda path: path.name, reverse=True):

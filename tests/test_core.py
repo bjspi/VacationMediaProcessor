@@ -614,8 +614,8 @@ class CommandTemplateTests(unittest.TestCase):
                 launch_command_template(f'"{exe}" -W "$source" "$target"', source=Path("left.mp4"), target=Path("right.mp4"))
 
         args, kwargs = popen.call_args
-        self.assertEqual(args[0][0], str(exe))
-        self.assertEqual(kwargs["cwd"], str(exe.parent))
+        self.assertEqual(Path(args[0][0]).resolve(), exe.resolve())
+        self.assertEqual(Path(kwargs["cwd"]).resolve(), exe.parent.resolve())
 
 
 class ToolStartupTests(unittest.TestCase):
@@ -1193,7 +1193,8 @@ class MainWindowPostApplyTests(unittest.TestCase):
             discovered = window._backup_path_for_plan(plan)
             can_open = window._can_open_diff_for_plan(plan)
 
-            self.assertEqual(discovered, backup)
+            self.assertIsNotNone(discovered)
+            self.assertEqual(discovered.resolve(), backup.resolve())
             self.assertTrue(can_open)
 
     def test_apply_item_update_refreshes_only_finished_row_and_enables_diff(self) -> None:
@@ -1291,9 +1292,14 @@ class MainWindowPostApplyTests(unittest.TestCase):
                 window._set_readback_diff_paths(paths)
                 window.open_readback_diff()
 
-        self.assertEqual(paths, (before_json, after_json))
+        expected_paths = (before_json.resolve(), after_json.resolve())
+        self.assertEqual(paths, expected_paths)
         self.assertTrue(window.readback_diff_button.isEnabled())
-        launch_command_template.assert_called_once_with(settings.diff_tools.text, source=before_json, target=after_json)
+        launch_command_template.assert_called_once_with(
+            settings.diff_tools.text,
+            source=expected_paths[0],
+            target=expected_paths[1],
+        )
 
     def test_row_textdiff_reads_fresh_exif_snapshots_then_launches_textdiff(self) -> None:
         """The row textdiff action should compare fresh ExifTool JSON for backup/current files."""
