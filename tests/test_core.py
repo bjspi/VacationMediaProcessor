@@ -473,6 +473,7 @@ class SettingsPersistenceTests(unittest.TestCase):
         self.assertEqual(settings.lasso_thumbnail_workers, 8)
         self.assertEqual(settings.exiftool_read_batch_size, 20)
         self.assertEqual(settings.exiftool_parallel_batches, 1)
+        self.assertEqual(settings.folder_drop_behavior, "ask")
 
     def test_skip_backup_round_trips_through_save_and_load(self) -> None:
         """The skip-backup toggle must persist and restore through the JSON settings file."""
@@ -542,6 +543,7 @@ class SettingsPersistenceTests(unittest.TestCase):
                 original.images.parallel_workers = 12
                 original.exiftool_read_batch_size = 33
                 original.exiftool_parallel_batches = 4
+                original.folder_drop_behavior = "add"
 
                 save_settings(original)
                 loaded = load_settings()
@@ -553,6 +555,7 @@ class SettingsPersistenceTests(unittest.TestCase):
         self.assertEqual(loaded.images.parallel_workers, 12)
         self.assertEqual(loaded.exiftool_read_batch_size, 33)
         self.assertEqual(loaded.exiftool_parallel_batches, 4)
+        self.assertEqual(loaded.folder_drop_behavior, "add")
 
     def test_parallel_worker_settings_are_clamped_on_load(self) -> None:
         """Persisted worker counts must stay inside safe ranges."""
@@ -689,6 +692,7 @@ class SettingsDialogTests(unittest.TestCase):
             dialog.exiftool_batch_size_spin.setValue(37)
             dialog.exiftool_parallel_batches_spin.setValue(3)
             dialog.lasso_cache_combo.setCurrentIndex(dialog.lasso_cache_combo.findData("disk"))
+            dialog.folder_drop_combo.setCurrentIndex(dialog.folder_drop_combo.findData("replace"))
 
             dialog._on_save()
 
@@ -698,6 +702,7 @@ class SettingsDialogTests(unittest.TestCase):
         self.assertEqual(settings.exiftool_read_batch_size, 37)
         self.assertEqual(settings.exiftool_parallel_batches, 3)
         self.assertEqual(settings.lasso_thumbnail_cache_mode, "disk")
+        self.assertEqual(settings.folder_drop_behavior, "replace")
         save_settings_mock.assert_called_once_with(settings)
 
 
@@ -1484,6 +1489,7 @@ class ApplyParallelismTests(unittest.TestCase):
             settings.images.parallel_workers = 8
             call_order: list[str] = []
             item_updates: list[ApplyItemUpdate] = []
+            progress_events = []
 
             def fake_produce_output(plan, *args, **kwargs):
                 call_order.append(plan.analysis.item.path.name)
@@ -1510,6 +1516,7 @@ class ApplyParallelismTests(unittest.TestCase):
                     root,
                     [image_one, image_two, video],
                     settings,
+                    callback=progress_events.append,
                     item_callback=item_updates.append,
                 )
 
@@ -1522,6 +1529,47 @@ class ApplyParallelismTests(unittest.TestCase):
         self.assertCountEqual([update.source_path.name for update in item_updates], ["img1.jpg", "img2.jpg", "clip.mp4"])
         self.assertTrue(all(update.changed for update in item_updates))
         backup_source.assert_not_called()
+        self.assertNotIn("video_transcode", [event.phase.value for event in progress_events])
+        self.assertNotIn("metadata_write", [event.phase.value for event in progress_events])
+
+    def test_video_progress_uses_only_duration_weighted_transcode_updates(self) -> None:
+        """Preparing and metadata work must not replace duration-weighted progress with item counts."""
+        from vmp.pipeline.apply import _produce_output
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "clip.mov"
+            source.write_bytes(b"source" * 100)
+            plan = self._make_plan(root, source.name, MediaKind.VIDEO)
+            plan.actions = [PlannedAction(ActionKind.VIDEO_TRANSCODE, "transcode", source)]
+            settings = AppSettings()
+            events = []
+
+            def fake_transcode(_source, target, _crf, _settings, _downscale, progress_fn):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"output")
+                progress_fn(0.0, 10.0, "1.0x")
+                progress_fn(5.0, 10.0, "1.0x")
+                progress_fn(10.0, 10.0, "1.0x")
+
+            with patch("vmp.pipeline.apply.transcode_video", side_effect=fake_transcode):
+                output = _produce_output(
+                    plan,
+                    root,
+                    root / "work",
+                    settings,
+                    events.append,
+                    index=4,
+                    total=10,
+                    video_state={"completed": 30.0, "speed_samples": []},
+                    total_video_seconds=100.0,
+                    video_durations={source: 10.0},
+                )
+
+        self.assertIsNotNone(output)
+        self.assertEqual([event.current for event in events], [30, 35, 40])
+        self.assertEqual([event.total for event in events], [100, 100, 100])
+        self.assertTrue(all(event.phase.value == "video_transcode" for event in events))
 
     def test_image_plans_fall_back_to_serial_when_workers_is_one(self) -> None:
         """A worker count of one must keep image work serial and still succeed."""
@@ -2291,6 +2339,117 @@ class ReentrancyGuardTests(unittest.TestCase):
         thread.quit.assert_called_once()
         thread.wait.assert_called_once_with(1000)
         thread.terminate.assert_not_called()
+
+
+class FolderDropTests(unittest.TestCase):
+    """Folder drops must honor batch behavior and the single-worker scan queue."""
+
+    def _window(self) -> MainWindow:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        app = QApplication.instance() or QApplication([])
+        self.assertIsNotNone(app)
+        self._app = app
+        with patch("vmp.gui.main.window.load_settings", return_value=AppSettings()), patch(
+            "vmp.gui.main.window.configure_logging", return_value=Path("log.txt")
+        ), patch("vmp.gui.main.window.setup_gui_logging"), patch(
+            "vmp.gui.main.window.resolve_executable", return_value="tool"
+        ):
+            return MainWindow()
+
+    def test_multiple_folders_on_empty_list_build_one_plan_and_start_one_scan(self) -> None:
+        window = self._window()
+        with tempfile.TemporaryDirectory() as tmp:
+            folders = [Path(tmp) / name for name in ("one", "two", "three")]
+            for folder in folders:
+                folder.mkdir()
+                (folder / f"{folder.name}.jpg").write_bytes(b"image")
+            with patch.object(window, "scan") as scan:
+                window._handle_dropped_folders(folders)
+
+        self.assertEqual(window.roots, [folder.resolve() for folder in folders])
+        self.assertEqual(len(window.plans), 3)
+        scan.assert_called_once()
+        self.assertEqual(len(scan.call_args.kwargs["items"]), 3)
+
+    def test_add_setting_starts_the_complete_dropped_batch_additively(self) -> None:
+        window = self._window()
+        window.settings_model.folder_drop_behavior = "add"
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = Path(tmp) / "existing"
+            first = Path(tmp) / "first"
+            second = Path(tmp) / "second"
+            for folder in (existing, first, second):
+                folder.mkdir()
+            window.roots = [existing.resolve()]
+            with patch.object(window, "_start_dropped_folder_batch") as start_batch:
+                window._handle_dropped_folders([first, second])
+
+        start_batch.assert_called_once_with([first.resolve(), second.resolve()], replace_existing=False)
+
+    def test_replace_setting_discards_older_queue_and_replaces_with_complete_batch(self) -> None:
+        window = self._window()
+        window.settings_model.folder_drop_behavior = "replace"
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = Path(tmp) / "existing"
+            stale = Path(tmp) / "stale"
+            first = Path(tmp) / "first"
+            second = Path(tmp) / "second"
+            for folder in (existing, stale, first, second):
+                folder.mkdir()
+            window.roots = [existing.resolve()]
+            window._pending_folders = [(stale.resolve(), False)]
+            with patch.object(window, "_discover_and_scan_roots") as discover_and_scan:
+                window._start_dropped_folder_batch([first.resolve(), second.resolve()], replace_existing=True)
+
+        self.assertEqual(window._pending_folders, [])
+        self.assertEqual(window.roots, [first.resolve(), second.resolve()])
+        discover_and_scan.assert_called_once_with([first.resolve(), second.resolve()])
+
+    def test_default_ask_setting_applies_answer_to_the_whole_batch(self) -> None:
+        window = self._window()
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = Path(tmp) / "existing"
+            folders = [Path(tmp) / name for name in ("one", "two")]
+            for folder in (existing, *folders):
+                folder.mkdir()
+            window.roots = [existing.resolve()]
+            with patch.object(
+                QMessageBox, "question", return_value=QMessageBox.StandardButton.No
+            ) as question, patch.object(window, "_start_dropped_folder_batch") as start_batch:
+                window._handle_dropped_folders(folders)
+
+        question.assert_called_once()
+        start_batch.assert_called_once_with(
+            [folders[0].resolve(), folders[1].resolve()], replace_existing=False
+        )
+
+    def test_drop_during_scan_is_queued_without_starting_a_second_worker(self) -> None:
+        window = self._window()
+        window.settings_model.folder_drop_behavior = "add"
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = Path(tmp) / "existing"
+            dropped = Path(tmp) / "dropped"
+            existing.mkdir()
+            dropped.mkdir()
+            window.roots = [existing.resolve()]
+            with patch.object(window, "_scan_is_running", return_value=True), patch.object(
+                window, "_has_running_work", return_value=True
+            ), patch.object(window, "_process_pending_folders") as process:
+                window._handle_dropped_folders([dropped])
+
+        self.assertEqual(window._pending_folders, [(dropped.resolve(), False)])
+        process.assert_not_called()
+        self.assertIn("1", window.status_label.text())
+
+    def test_controls_stay_busy_between_queued_folder_scans(self) -> None:
+        window = self._window()
+        window._pending_folders = [(Path.cwd(), False)]
+        window._set_busy(True)
+
+        window.on_scan_finished([], [])
+
+        self.assertFalse(window.scan_button.isEnabled())
+        self.assertIn("1", window.status_label.text())
 
 
 class VideoNotSmallerTests(unittest.TestCase):

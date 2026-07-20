@@ -98,7 +98,8 @@ class MainWindow(
         self.settings_model = load_settings()
         self.roots: list[Path] = []
         self._scan_merge: bool = False
-        self._pending_folders: list[Path] = []
+        # (folder, replace_existing): queued folder scans are always sequential.
+        self._pending_folders: list[tuple[Path, bool]] = []
         self._original_sizes: dict[Path, int] = {}
         self._backup_paths: dict[Path, Path] = {}
         self._applied_plan_roots: dict[int, Path] = {}

@@ -95,6 +95,12 @@ def _cache_mode(value: Any) -> str:
     return text if text in {"ram", "disk", "off"} else "ram"
 
 
+def _folder_drop_behavior(value: Any) -> str:
+    """Return the action used when folders are dropped onto an existing list."""
+    text = str(value or "ask").lower()
+    return text if text in {"ask", "add", "replace"} else "ask"
+
+
 def _language(value: Any) -> str:
     """Return a supported UI language preference ('auto' or an available code)."""
     from .i18n import available_languages
@@ -150,6 +156,7 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
     return AppSettings(
         recursive=bool(payload.get("recursive", True)),
         language=_language(payload.get("language", "auto")),
+        folder_drop_behavior=_folder_drop_behavior(payload.get("folder_drop_behavior", "ask")),
         skip_backup=bool(payload.get("skip_backup", False)),
         read_after_exif=bool(payload.get("read_after_exif", False)),
         table_font_size=_safe_int(payload.get("table_font_size"), 10),

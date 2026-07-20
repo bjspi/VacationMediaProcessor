@@ -44,12 +44,24 @@ def scan_and_plan(
     normalized_root = normalize_root(root)
     raise_if_cancelled(cancel_callback)
     LOGGER.info("Starting scan for %s", normalized_root)
-    _resolve_required_tool("ExifTool", settings.tools.exiftool)
     items = discover_media(normalized_root, recursive=settings.recursive)
     LOGGER.info("Discovered %s media files", len(items))
+    emit(callback, Phase.DISCOVERY, len(items), len(items), f"Found {len(items)} media files.")
+    return scan_items_and_plan(items, settings, callback, results_callback, cancel_callback)
+
+
+def scan_items_and_plan(
+    items: list[MediaItem],
+    settings: AppSettings,
+    callback: ProgressCallback | None = None,
+    results_callback: ResultsCallback | None = None,
+    cancel_callback: CancelCallback | None = None,
+) -> tuple[list[AnalysisResult], list[MediaPlan]]:
+    """Scan and plan an already-discovered, potentially multi-root item list."""
+    raise_if_cancelled(cancel_callback)
+    _resolve_required_tool("ExifTool", settings.tools.exiftool)
     if any(item.kind == MediaKind.VIDEO for item in items):
         _resolve_required_tool("FFprobe", settings.tools.ffprobe)
-    emit(callback, Phase.DISCOVERY, len(items), len(items), f"Found {len(items)} media files.")
     results: list[AnalysisResult] = []
     total = len(items)
     chunk_size = max(1, min(200, int(settings.exiftool_read_batch_size)))
@@ -118,7 +130,7 @@ def scan_and_plan(
     raise_if_cancelled(cancel_callback)
     emit(callback, Phase.PLANNING, total, total, "Building dry-run plan...")
     plans = build_plans(results, settings)
-    LOGGER.info("Scan finished for %s with %s results and %s plans", normalized_root, len(results), len(plans))
+    LOGGER.info("Item scan finished with %s results and %s plans", len(results), len(plans))
     return results, plans
 
 

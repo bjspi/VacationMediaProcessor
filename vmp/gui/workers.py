@@ -8,8 +8,8 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from ..core.logging_config import get_logger
-from ..core.models import AnalysisResult, AppSettings, ApplyItemUpdate, MediaPlan, PipelineProgress
-from ..pipeline import apply_plans, maintain_jpegs, scan_and_plan
+from ..core.models import AnalysisResult, AppSettings, ApplyItemUpdate, MediaItem, MediaPlan, PipelineProgress
+from ..pipeline import apply_plans, maintain_jpegs, scan_and_plan, scan_items_and_plan
 
 LOGGER = get_logger(__name__)
 
@@ -22,23 +22,33 @@ class ScanWorker(QObject):
     finished = pyqtSignal(object, object)
     failed = pyqtSignal(str)
 
-    def __init__(self, root: Path, settings: AppSettings) -> None:
+    def __init__(self, root: Path, settings: AppSettings, items: list[MediaItem] | None = None) -> None:
         super().__init__()
         self._root = root
         self._settings = settings
+        self._items = items
 
     @pyqtSlot()
     def run(self) -> None:
         """Run the scan task."""
         try:
             LOGGER.info("ScanWorker started for root=%s", self._root)
-            results, plans = scan_and_plan(
-                self._root,
-                self._settings,
-                self._emit_progress,
-                self._emit_partial,
-                self._cancel_requested,
-            )
+            if self._items is None:
+                results, plans = scan_and_plan(
+                    self._root,
+                    self._settings,
+                    self._emit_progress,
+                    self._emit_partial,
+                    self._cancel_requested,
+                )
+            else:
+                results, plans = scan_items_and_plan(
+                    self._items,
+                    self._settings,
+                    self._emit_progress,
+                    self._emit_partial,
+                    self._cancel_requested,
+                )
             LOGGER.info("ScanWorker finished with results=%s plans=%s", len(results), len(plans))
             self.finished.emit(results, plans)
         except Exception as exc:  # noqa: BLE001

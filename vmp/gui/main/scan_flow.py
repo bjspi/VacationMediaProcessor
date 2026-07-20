@@ -11,7 +11,7 @@ from ...core.discovery import discover_media, normalize_root
 from ...core.i18n import tr
 from ..workers import ScanWorker
 from ...core.logging_config import get_logger
-from ...core.models import AnalysisResult, MediaKind, MediaPlan
+from ...core.models import AnalysisResult, MediaItem, MediaKind, MediaPlan
 from ...reports import vacation_span_warning
 
 LOGGER = get_logger(__name__)
@@ -26,30 +26,108 @@ class ScanFlowMixin:
             event.acceptProposedAction()
 
     def dropEvent(self, event: QDropEvent) -> None:
-        """Open dropped folder(s).
-
-        When nothing is loaded yet, several dropped folders are processed together
-        into one combined list (no replace/add prompt). Once a list exists, the
-        first folder goes through the usual add/replace flow.
-        """
-        if self._block_if_busy():
-            return
+        """Open all dropped folders according to the persistent drop behavior."""
         folders = [Path(url.toLocalFile()) for url in event.mimeData().urls()]
         folders = [path for path in folders if path.is_dir()]
         if not folders:
             QMessageBox.warning(self, "Drop folder", tr("Bitte einen Ordner droppen."))
             return
-        if not self.roots and len(folders) > 1:
-            self._open_multiple_folders(folders)
-        else:
-            self.open_folder(folders[0])
+        self._handle_dropped_folders(folders)
 
     def _open_multiple_folders(self, folders: list[Path]) -> None:
-        """Open the first folder fresh and queue the rest to merge in sequentially."""
-        first, *rest = folders
-        self._pending_folders = list(rest)
-        LOGGER.info("Dropped %s folders onto empty list; queueing %s after the first", len(folders), len(rest))
-        self.open_folder(first)
+        """Compatibility wrapper for opening a dropped folder batch."""
+        self._handle_dropped_folders(folders)
+
+    def _scan_is_running(self) -> bool:
+        """Return whether the occupied worker slot currently belongs to a scan."""
+        return isinstance(self.worker, ScanWorker) and bool(
+            self.worker_thread and self.worker_thread.isRunning()
+        )
+
+    def _ask_drop_action(self, folders: list[Path]) -> str | None:
+        """Ask once whether a complete dropped batch should add or replace."""
+        folder_lines = "\n".join(f"• {folder}" for folder in folders)
+        answer = QMessageBox.question(
+            self,
+            tr("Ordner hinzufügen"),
+            tr(
+                "Es ist bereits eine Dateiliste geöffnet.\n\n"
+                "Neu gedroppte Ordner ({count}):\n{folders}\n\n"
+                "Ja = Vorhandene Liste ersetzen\n"
+                "Nein = Dateien zusätzlich hinzufügen"
+            ).format(count=len(folders), folders=folder_lines),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+        )
+        if answer == QMessageBox.StandardButton.Cancel:
+            return None
+        return "replace" if answer == QMessageBox.StandardButton.Yes else "add"
+
+    def _handle_dropped_folders(self, folders: list[Path]) -> None:
+        """Validate and schedule every folder from one drag-and-drop operation."""
+        normalized_folders: list[Path] = []
+        for folder in folders:
+            try:
+                normalized = normalize_root(folder)
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("Dropped folder could not be opened, skipping %s: %s", folder, exc)
+                continue
+            if normalized not in normalized_folders:
+                normalized_folders.append(normalized)
+        if not normalized_folders:
+            QMessageBox.warning(self, "Drop folder", tr("Bitte einen Ordner droppen."))
+            return
+
+        scan_running = self._scan_is_running()
+        if self._has_running_work() and not scan_running:
+            self._block_if_busy()
+            return
+
+        action = "replace"
+        if self.roots:
+            action = self.settings_model.folder_drop_behavior
+            if action == "ask":
+                action = self._ask_drop_action(normalized_folders)
+                if action is None:
+                    LOGGER.info("Folder drop cancelled by user")
+                    return
+
+        if not scan_running:
+            LOGGER.info(
+                "Starting one scan for %s dropped folder(s), action=%s",
+                len(normalized_folders), action,
+            )
+            self._start_dropped_folder_batch(normalized_folders, replace_existing=action == "replace")
+            return
+
+        # Drops made after a worker has already started retain the existing safe
+        # sequential queue. Only one simultaneous multi-drop becomes one scan.
+        if action == "replace":
+            self._pending_folders.clear()
+        self._pending_folders.extend(
+            (folder, action == "replace" and index == 0)
+            for index, folder in enumerate(normalized_folders)
+        )
+        LOGGER.info("Queued %s dropped folder(s) behind the running scan", len(normalized_folders))
+        self.status_label.setText(
+            tr("{count} Ordner zum laufenden Scan vorgemerkt.").format(count=len(normalized_folders))
+        )
+
+    def _start_dropped_folder_batch(self, folders: list[Path], replace_existing: bool) -> None:
+        """Load one dropped folder batch and scan all of its files together."""
+        if replace_existing:
+            self._pending_folders.clear()
+            self._reset_for_new_root(folders[0])
+            self.roots.extend(folders[1:])
+            roots_to_scan = folders
+        else:
+            roots_to_scan = [folder for folder in folders if folder not in self.roots]
+            if not roots_to_scan:
+                QMessageBox.information(self, tr("Ordner"), tr("Dieser Ordner ist bereits geöffnet."))
+                return
+            self.roots.extend(roots_to_scan)
+            self._scan_merge = True
+        self.folder_label.setText(" + ".join(str(root) for root in self.roots))
+        self._discover_and_scan_roots(roots_to_scan)
 
     def choose_folder(self) -> None:
         """Show a folder picker."""
@@ -133,27 +211,47 @@ class ScanFlowMixin:
 
     def _discover_and_scan(self, normalized: Path) -> None:
         """Discover media in a folder and start a scan."""
+        self._discover_and_scan_roots([normalized])
+
+    def _discover_and_scan_roots(self, roots: list[Path]) -> None:
+        """Discover all roots first, show one pending list, then start one scan."""
         self._sync_settings_from_ui()
+        items: list[MediaItem] = []
         try:
-            items = discover_media(normalized, recursive=self.settings_model.recursive)
+            for root in roots:
+                items.extend(discover_media(root, recursive=self.settings_model.recursive))
         except Exception as exc:  # noqa: BLE001
-            LOGGER.exception("Could not discover media for %s", normalized)
+            LOGGER.exception("Could not discover media for folder batch: %s", roots)
             QMessageBox.critical(self, tr("Dateiliste"), str(exc))
             return
+        existing_paths = (
+            {plan.analysis.item.path.resolve() for plan in self.plans}
+            if self._scan_merge
+            else set()
+        )
+        new_items: list[MediaItem] = []
+        seen_paths = set(existing_paths)
+        for item in items:
+            resolved_path = item.path.resolve()
+            if resolved_path in seen_paths:
+                continue
+            seen_paths.add(resolved_path)
+            new_items.append(item)
         if self._scan_merge:
-            existing_paths = {plan.analysis.item.path.resolve() for plan in self.plans}
-            new_items = [item for item in items if item.path.resolve() not in existing_paths]
             self.plans.extend(self._pending_plan(item) for item in new_items)
             LOGGER.info("Additive discovery: %s new items (skipped %s duplicates)", len(new_items), len(items) - len(new_items))
         else:
-            self.plans = [self._pending_plan(item) for item in items]
+            self.plans = [self._pending_plan(item) for item in new_items]
         self.populate_table()
         self.status_label.setText(tr("{count} verarbeitbare Datei(en). Scan startet...").format(count=len(self.plans)))
-        LOGGER.info("File list contains %s processable files", len(self.plans))
-        self.scan(normalized)
+        LOGGER.info(
+            "Combined file list contains %s processable files from %s folder(s)",
+            len(new_items), len(roots),
+        )
+        self.scan(roots[0], items=new_items)
 
-    def scan(self, root: Path | None = None) -> None:
-        """Start scan and planning for the given root (or the primary root)."""
+    def scan(self, root: Path | None = None, items: list[MediaItem] | None = None) -> None:
+        """Start scanning a discovered item batch, or discover the selected root."""
         scan_root = root or self.root
         if scan_root is None:
             LOGGER.warning("Scan requested without root")
@@ -163,9 +261,10 @@ class ScanFlowMixin:
             return
         self._sync_settings_from_ui()
         self._set_busy(True)
+        self.progress.setValue(0)
         self.status_label.setText(tr("Scan läuft..."))
         LOGGER.info("Starting scan worker for %s", scan_root)
-        worker = ScanWorker(scan_root, self.settings_model)
+        worker = ScanWorker(scan_root, self.settings_model, items=items)
         worker.partial.connect(self.on_scan_partial)
         self._start_worker(worker, self.on_scan_finished)
 
@@ -196,13 +295,23 @@ class ScanFlowMixin:
         QThread has fully finished), so ``_block_if_busy`` cannot veto it.
         """
         while self._pending_folders:
-            next_folder = self._pending_folders.pop(0)
+            next_folder, replace_existing = self._pending_folders.pop(0)
             try:
                 next_normalized = normalize_root(next_folder)
             except Exception as exc:  # noqa: BLE001
                 LOGGER.warning("Queued folder could not be opened, skipping %s: %s", next_folder, exc)
                 continue
-            LOGGER.info("Processing queued dropped folder: %s", next_normalized)
+            LOGGER.info(
+                "Processing queued dropped folder: %s (replace=%s)",
+                next_normalized, replace_existing,
+            )
+            if replace_existing:
+                self._reset_for_new_root(next_normalized)
+                self._discover_and_scan(next_normalized)
+                return
+            if next_normalized in self.roots:
+                LOGGER.info("Queued folder already added, skipping: %s", next_normalized)
+                continue
             self._add_folder(next_normalized)
             return
 
@@ -228,6 +337,17 @@ class ScanFlowMixin:
         all_plans = self.plans
         LOGGER.info("Scan finished in GUI results=%s plans=%s actionable=%s", len(self.results), len(all_plans), sum(1 for plan in all_plans if plan.actions))
         self.populate_table()
+        if self._pending_folders:
+            # Keep Apply/open controls disabled across the tiny gap between the
+            # current QThread finishing and the next queued scan starting.
+            self._update_missing_exif_badge()
+            self._update_pairs_badge()
+            self.status_label.setText(
+                tr("Ordnerscan abgeschlossen. Noch {count} Ordner in der Warteschlange.").format(
+                    count=len(self._pending_folders)
+                )
+            )
+            return
         self._set_busy(False)
         actionable_plans = [plan for plan in all_plans if plan.actions]
         self.run_button.setEnabled(bool(actionable_plans))
@@ -240,11 +360,6 @@ class ScanFlowMixin:
         self._update_missing_exif_badge()
         self._update_pairs_badge()
         self.status_label.setText(tr("Plan bereit: {count} Dateien.").format(count=len(self.results)))
-        if self._pending_folders:
-            # Queued multi-drop folders continue from _process_pending_folders(),
-            # which runs via thread.finished — starting the next scan here would
-            # hit _block_if_busy() because this thread is still isRunning().
-            return
         span_warning = vacation_span_warning(
             [plan.analysis for plan in all_plans],
             self.settings_model.metadata.vacation_span_weeks,

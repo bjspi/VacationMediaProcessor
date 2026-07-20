@@ -168,7 +168,6 @@ def _apply_one_plan(
             # Planning is a snapshot. A file can appear at the chosen target
             # before Apply; reject it before metadata writes or conversions.
             raise PipelineError(f"Final path already exists, refusing to overwrite: {final_path}")
-        emit(callback, Phase.VIDEO_TRANSCODE, index - 1, total, f"Preparing {source.name}")
         output = _produce_output(
             plan,
             item_root,
@@ -204,7 +203,8 @@ def _apply_one_plan(
             outcome.skipped = True
             return outcome
         if output == source:
-            emit(callback, Phase.METADATA_WRITE, index, total, f"Writing metadata: {source.name}")
+            if video_state is None:
+                emit(callback, Phase.METADATA_WRITE, index, total, f"Writing metadata: {source.name}")
             LOGGER.info("Writing metadata in-place source=%s final=%s", source, final_path)
             write_metadata(plan.analysis, source, settings)
             if not _same_path(final_path, source):
@@ -214,7 +214,8 @@ def _apply_one_plan(
                 LOGGER.info("Moving source to final path: %s -> %s", source, final_path)
                 shutil.move(str(source), str(final_path))
         else:
-            emit(callback, Phase.METADATA_WRITE, index, total, f"Copying/writing metadata: {source.name}")
+            if video_state is None:
+                emit(callback, Phase.METADATA_WRITE, index, total, f"Copying/writing metadata: {source.name}")
             LOGGER.info("Copying metadata source=%s output=%s", source, output)
             copy_all_metadata(source, output, settings, plan.analysis.item.kind)
             LOGGER.info("Writing metadata output=%s", output)
@@ -618,7 +619,6 @@ def _produce_output(
         LOGGER.info("Image output created target=%s size=%s", temp_target, temp_target.stat().st_size)
         return temp_target
     if ActionKind.VIDEO_TRANSCODE in action_kinds:
-        emit(callback, Phase.VIDEO_TRANSCODE, max(0, index - 1), total, f"Preparing video: {source.name}")
         LOGGER.info("Producing video output source=%s target=%s", source, temp_target)
         this_duration = (video_durations or {}).get(source, 0.0)
 
@@ -670,14 +670,17 @@ def _produce_output(
                     f"Video {index}/{total}: {source.name} {file_pct}%{speed_display}{eta_text}",
                 )
             else:
-                pct = int(current_sec / total_sec * 100) if total_sec > 0 else 0
+                file_fraction = current_sec / total_sec if total_sec > 0 else 0.0
+                file_fraction = min(max(file_fraction, 0.0), 1.0)
+                overall_pct = int(((max(0, index - 1) + file_fraction) / max(total, 1)) * 100)
+                file_pct = int(file_fraction * 100)
                 speed_display = f" @ {speed}" if speed else ""
                 emit(
                     callback,
                     Phase.VIDEO_TRANSCODE,
-                    index,
-                    total,
-                    f"Transcoding {source.name}: {pct}%{speed_display}",
+                    overall_pct,
+                    100,
+                    f"Transcoding {source.name}: {file_pct}%{speed_display}",
                 )
 
         crf = crf_for_video(plan.analysis, settings)

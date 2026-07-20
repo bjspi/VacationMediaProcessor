@@ -155,6 +155,7 @@ class AppSettings:
 
     recursive: bool = True
     language: str = "auto"  # 'auto' (system), 'de', 'en'
+    folder_drop_behavior: str = "ask"  # 'ask', 'add', 'replace'
     skip_backup: bool = False
     read_after_exif: bool = False
     table_font_size: int = 10
