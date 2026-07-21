@@ -48,7 +48,7 @@ from .shared import (
     raise_if_cancelled,
     work_dir,
 )
-from ..planner import crf_for_video, effective_video_bucket, video_downscale_target
+from ..planner import crf_for_video, effective_video_bucket, video_downscale_target, video_fps_limit
 
 LOGGER = get_logger(__name__)
 
@@ -685,30 +685,43 @@ def _produce_output(
 
         crf = crf_for_video(plan.analysis, settings)
         downscale = video_downscale_target(plan.analysis, settings)
+        fps_limit = video_fps_limit(plan.analysis, settings)
         bucket = effective_video_bucket(plan.analysis, settings)
         if settings.videos.audio_codec == "copy":
             audio_desc = "copy (original)"
         else:
             audio_desc = f"{settings.videos.audio_codec} {settings.videos.audio_bitrate}"
         LOGGER.info(
-            "ACTION video=%s | Transcode HEVC/x265 | Bucket=%s | Downscale->FHD=%s | CRF=%s | Preset=%s | Audio=%s",
+            "ACTION video=%s | Transcode HEVC/x265 | Bucket=%s | Downscale->FHD=%s | FPS-Limit=%s | CRF=%s | Preset=%s | Audio=%s",
             source.name,
             bucket,
             "ja" if downscale is not None else "nein",
+            fps_limit if fps_limit is not None else "nein",
             crf,
             settings.videos.preset,
             audio_desc,
         )
         if video_state is not None:
             video_state["last_logged_decile"] = -1
-        transcode_video(
-            source,
-            temp_target,
-            crf,
-            settings,
-            downscale,
-            _video_progress,
-        )
+        if fps_limit is None:
+            transcode_video(
+                source,
+                temp_target,
+                crf,
+                settings,
+                downscale,
+                _video_progress,
+            )
+        else:
+            transcode_video(
+                source,
+                temp_target,
+                crf,
+                settings,
+                downscale,
+                _video_progress,
+                max_fps=fps_limit,
+            )
         if not temp_target.exists():
             raise PipelineError(f"FFmpeg did not create expected file: {temp_target}")
         source_size = source.stat().st_size

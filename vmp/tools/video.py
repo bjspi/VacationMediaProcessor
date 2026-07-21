@@ -139,9 +139,12 @@ def transcode_video(
     settings: AppSettings,
     max_dimensions: tuple[int, int] | None = None,
     progress_fn: Callable[[float, float, str], None] | None = None,
+    max_fps: int | None = None,
 ) -> None:
     """Transcode a video to HEVC/x265 MP4.
 
+    ``max_dimensions`` and ``max_fps`` are combined in the same FFmpeg video
+    filter graph, so scaling and frame-rate reduction require no extra encode.
     When ``progress_fn`` is provided, it is called with
     ``(current_seconds, total_seconds, speed_text)`` as FFmpeg reports progress,
     enabling the GUI to show per-file progress and ETA.
@@ -198,13 +201,15 @@ def transcode_video(
             "use_metadata_tags+faststart",
         ]
     )
-    video_filters = ["format=yuv420p"]
+    video_filters: list[str] = []
     if max_dimensions is not None:
         max_width, max_height = max_dimensions
-        video_filters.insert(
-            0,
+        video_filters.append(
             f"scale='min({max_width},iw)':'min({max_height},ih)':force_original_aspect_ratio=decrease",
         )
+    if max_fps is not None:
+        video_filters.append(f"fps={max_fps}")
+    video_filters.append("format=yuv420p")
     args.extend(["-vf", ",".join(video_filters)])
     if progress_fn is not None:
         args.extend(["-progress", "pipe:1"])

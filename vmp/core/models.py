@@ -105,6 +105,7 @@ class VideoSettings:
     qhd_crf: int = 26
     uhd_crf: int = 28
     limit_to_fhd: bool = False
+    limit_to_30_fps: bool = False
     qhd_long_edge_threshold: int = 2000
     uhd_long_edge_threshold: int = 3000
     preset: str = "medium"
@@ -237,6 +238,7 @@ class AnalysisResult:
     width: int | None = None
     height: int | None = None
     codec: str | None = None
+    fps: float | None = None
     has_depth: bool = False
 
 

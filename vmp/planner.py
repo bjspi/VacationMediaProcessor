@@ -183,6 +183,16 @@ def video_downscale_target(result: AnalysisResult, settings: AppSettings) -> tup
     return 1920, 1080
 
 
+def video_fps_limit(result: AnalysisResult, settings: AppSettings) -> int | None:
+    """Return a 30-fps output cap only for source videos above that rate."""
+    if not settings.videos.limit_to_30_fps:
+        return None
+    if result.item.kind != MediaKind.VIDEO or result.fps is None:
+        return None
+    # Tolerate tiny probe/float deviations around an actual 30-fps source.
+    return 30 if result.fps > 30.01 else None
+
+
 def resolve_collision_target(
     parent: Path,
     base_dt: datetime,
@@ -322,6 +332,7 @@ def build_plans(results: list[AnalysisResult], settings: AppSettings) -> list[Me
             bucket = video_bucket_label(result, settings)
             crf = crf_for_video(result, settings)
             downscale_target = video_downscale_target(result, settings)
+            fps_limit = video_fps_limit(result, settings)
             if downscale_target is not None:
                 actions.append(
                     PlannedAction(
@@ -336,7 +347,20 @@ def build_plans(results: list[AnalysisResult], settings: AppSettings) -> list[Me
                     kind=ActionKind.VIDEO_TRANSCODE,
                     description=(
                         tr("Transcode zu HEVC/x265 MP4, Bucket {bucket}, CRF {crf}").format(bucket=bucket, crf=crf)
-                        + (tr("; mit Full-HD-Downscale; ") if downscale_target is not None else "; ")
+                        + (
+                            "; "
+                            + ", ".join(
+                                option
+                                for option in (
+                                    tr("Full-HD-Downscale") if downscale_target is not None else "",
+                                    tr("max. 30 fps") if fps_limit is not None else "",
+                                )
+                                if option
+                            )
+                            + "; "
+                            if downscale_target is not None or fps_limit is not None
+                            else "; "
+                        )
                         + _audio_transcode_description(settings)
                     ),
                     source=result.item.path,

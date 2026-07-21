@@ -135,6 +135,15 @@ def build_workflow_section(window: "MainWindow") -> QWidget:
         )
     )
     window.limit_fhd_check.toggled.connect(window._on_workflow_settings_changed)
+    window.limit_fps_check = QCheckBox(tr("Video auf maximal 30 FPS begrenzen"))
+    window.limit_fps_check.setChecked(window.settings_model.videos.limit_to_30_fps)
+    window.limit_fps_check.setToolTip(
+        tr(
+            "Videos über 30 fps werden im selben FFmpeg-Transcode auf 30 fps reduziert. "
+            "Videos mit 30 fps oder weniger bleiben bei ihrer ursprünglichen Framerate."
+        )
+    )
+    window.limit_fps_check.toggled.connect(window._on_workflow_settings_changed)
     window.audio_codec_combo = QComboBox()
     window.audio_codec_combo.addItem("AAC", "aac")
     window.audio_codec_combo.addItem("AC3", "ac3")
@@ -246,6 +255,16 @@ def build_workflow_section(window: "MainWindow") -> QWidget:
     )
     form.addRow("", stepper_pair_row(tr("QHD ab"), window.qhd_threshold_spin, tr("4K ab"), window.uhd_threshold_spin))
     form.addRow("", checkbox_with_info(window.limit_fhd_check, tr("Videos über Full HD werden beim Apply zusätzlich heruntergerechnet, ohne das Seitenverhältnis zu verändern.")))
+    form.addRow(
+        "",
+        checkbox_with_info(
+            window.limit_fps_check,
+            tr(
+                "Videos über 30 fps werden im selben FFmpeg-Lauf auf 30 fps reduziert; "
+                "niedrigere Frameraten werden nicht hochgerechnet."
+            ),
+        ),
+    )
     form.addRow(
         "",
         combo_pair_row(tr("Audio-Codec"), window.audio_codec_combo, "Bitrate", window.audio_bitrate_combo),

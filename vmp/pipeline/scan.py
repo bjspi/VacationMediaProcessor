@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from fractions import Fraction
+from math import isfinite
 from pathlib import Path
 
 from ..core.discovery import discover_media, normalize_root
@@ -160,7 +162,12 @@ def _analyze_metadata_chunk(
             results.append(_missing_metadata_result(item))
             continue
         result = analyze_item(item, raw, settings.metadata)
-        if item.kind == MediaKind.VIDEO and (result.width is None or result.height is None or result.codec is None):
+        if item.kind == MediaKind.VIDEO and (
+            result.width is None
+            or result.height is None
+            or result.codec is None
+            or result.fps is None
+        ):
             _enrich_video_with_ffprobe(result, settings)
         results.append(result)
     return results
@@ -182,7 +189,7 @@ def _missing_metadata_result(item: MediaItem) -> AnalysisResult:
 
 
 def _enrich_video_with_ffprobe(result: AnalysisResult, settings: AppSettings) -> None:
-    """Fill missing video width, height, and codec fields from FFprobe."""
+    """Fill missing video dimensions, codec, and frame rate from FFprobe."""
     try:
         payload = probe_video(result.item.path, settings)
     except Exception:  # noqa: BLE001
@@ -199,6 +206,11 @@ def _enrich_video_with_ffprobe(result: AnalysisResult, settings: AppSettings) ->
             result.height = _safe_int(stream.get("height"))
         if result.codec is None and stream.get("codec_name"):
             result.codec = str(stream["codec_name"])
+        if result.fps is None:
+            result.fps = _safe_frame_rate(
+                stream.get("avg_frame_rate"),
+                stream.get("r_frame_rate"),
+            )
         return
 
 
@@ -209,5 +221,24 @@ def _safe_int(value: object) -> int | None:
         return int(str(value))
     except (TypeError, ValueError):
         return None
+
+
+def _safe_frame_rate(*values: object) -> float | None:
+    """Return the first valid positive FFprobe frame-rate value.
+
+    FFprobe normally reports rates as rational strings such as ``60000/1001``.
+    Prefer the average rate supplied first, while allowing the raw stream rate
+    as a fallback for payloads where ``avg_frame_rate`` is ``0/0`` or missing.
+    """
+    for value in values:
+        if value in (None, ""):
+            continue
+        try:
+            rate = float(Fraction(str(value)))
+        except (ValueError, ZeroDivisionError):
+            continue
+        if rate > 0 and isfinite(rate):
+            return rate
+    return None
 
 

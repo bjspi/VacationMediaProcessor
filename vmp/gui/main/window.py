@@ -294,6 +294,7 @@ class MainWindow(
             refreshed.width = refreshed.width if refreshed.width is not None else previous.width
             refreshed.height = refreshed.height if refreshed.height is not None else previous.height
             refreshed.codec = refreshed.codec if refreshed.codec is not None else previous.codec
+            refreshed.fps = refreshed.fps if refreshed.fps is not None else previous.fps
             refreshed.has_depth = refreshed.has_depth or previous.has_depth
             refreshed_results.append(refreshed)
         self.results = refreshed_results
@@ -491,6 +492,7 @@ class MainWindow(
         self.settings_model.videos.qhd_crf = self.qhd_spin.value()
         self.settings_model.videos.uhd_crf = self.uhd_spin.value()
         self.settings_model.videos.limit_to_fhd = self.limit_fhd_check.isChecked()
+        self.settings_model.videos.limit_to_30_fps = self.limit_fps_check.isChecked()
         qhd_threshold = self.qhd_threshold_spin.value()
         uhd_threshold = self.uhd_threshold_spin.value()
         if uhd_threshold <= qhd_threshold:

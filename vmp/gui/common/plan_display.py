@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import isfinite
 from pathlib import Path
 
 from ...core.i18n import tr
@@ -69,21 +70,26 @@ def details_markdown(plan: MediaPlan, bucket: str) -> str:
 
 
 def codec_cell_text(result: AnalysisResult) -> str:
-    """Return the Codec column text: normalized codec plus a resolution tag.
+    """Return the Codec column text with resolution and rounded frame rate.
 
-    e.g. "x265 [FHD]" / "x264 [4K]". For non-videos there is no codec and
-    the cell stays empty. If only one part is known it is shown alone.
+    e.g. ``x265 [FHD · 30 fps]`` / ``x264 [4K · 60 fps]``. For
+    non-videos there is no codec and the cell stays empty. If only some parts
+    are known, the available values are still shown.
     """
     codec = display_video_codec(result.codec)
     res = ""
+    fps = ""
     if result.item.kind == MediaKind.VIDEO:
         res = resolution_class(result.width, result.height)
-    if codec and res:
-        return f"{codec} [{res}]"
+        if result.fps is not None and result.fps > 0 and isfinite(result.fps):
+            fps = f"{int(result.fps + 0.5)} fps"
+    details = " · ".join(part for part in (res, fps) if part)
+    if codec and details:
+        return f"{codec} [{details}]"
     if codec:
         return codec
-    if res:
-        return f"[{res}]"
+    if details:
+        return f"[{details}]"
     return ""
 
 

@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from vmp.core.discovery import discover_media
 from vmp.tools import convert_image, copy_all_metadata, maintain_jpeg, write_metadata
+from vmp.gui.common.plan_display import codec_cell_text
 from vmp.gui.main.window import MainWindow, _missing_pipeline_tools, distribute_column_widths
 from vmp.gui.settings_dialog import SettingsDialog
 from vmp.manifest import write_before_after_manifests
@@ -42,8 +43,10 @@ from vmp.planner import (
     crf_for_video,
     video_bucket,
     video_bucket_label,
+    video_fps_limit,
 )
 from vmp.pipeline import _cleanup_empty_generated_dirs, apply_plans, maintain_jpegs, scan_and_plan
+from vmp.pipeline.scan import _enrich_video_with_ffprobe, _safe_frame_rate
 from vmp.reports import display_video_codec, plan_action_summary, preview_row, resolution_class
 from vmp.core.settings import load_settings, save_settings
 
@@ -230,6 +233,49 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(display_video_codec("av1"), "AV1")
         self.assertEqual(display_video_codec(None), "")
 
+    def test_codec_cell_includes_resolution_and_rounded_fps(self) -> None:
+        """The codec cell should compactly show source resolution and whole FPS."""
+        _settings, result = self._video_result(3840, 2160)
+        result.codec = "hevc"
+        result.fps = 60000 / 1001
+
+        self.assertEqual(codec_cell_text(result), "x265 [4K · 60 fps]")
+
+    def test_codec_cell_keeps_existing_format_when_fps_is_unknown(self) -> None:
+        """Videos without a usable frame rate should retain the old display."""
+        _settings, result = self._video_result(1920, 1080)
+        result.codec = "h264"
+
+        self.assertEqual(codec_cell_text(result), "x264 [FHD]")
+
+    def test_ffprobe_frame_rate_parser_handles_ntsc_and_fallback(self) -> None:
+        """Rational FFprobe values should parse, with r_frame_rate as fallback."""
+        self.assertAlmostEqual(_safe_frame_rate("60000/1001"), 59.94005994)
+        self.assertEqual(_safe_frame_rate("0/0", "30/1"), 30.0)
+        self.assertIsNone(_safe_frame_rate("0/0", None))
+
+    def test_ffprobe_enrichment_adds_frame_rate(self) -> None:
+        """Video scan enrichment should retain FFprobe's average frame rate."""
+        settings, result = self._video_result(3840, 2160)
+        result.codec = "hevc"
+        payload = {
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "width": 3840,
+                    "height": 2160,
+                    "codec_name": "hevc",
+                    "avg_frame_rate": "60000/1001",
+                    "r_frame_rate": "60/1",
+                }
+            ]
+        }
+
+        with patch("vmp.pipeline.scan.probe_video", return_value=payload):
+            _enrich_video_with_ffprobe(result, settings)
+
+        self.assertAlmostEqual(result.fps, 59.94005994)
+
     def test_qhd_bucket_uses_qhd_crf(self) -> None:
         """QHD videos should use the dedicated QHD CRF setting."""
         settings, result = self._video_result(2560, 1440)
@@ -288,6 +334,40 @@ class PlannerTests(unittest.TestCase):
         descriptions = " ".join(action.description for action in plan.actions)
         self.assertIn("Bucket 4K -> FHD, CRF 23", descriptions)
         self.assertNotIn("CRF 31", descriptions)
+
+    def test_video_fps_limit_applies_only_above_30_fps(self) -> None:
+        """The setting should cap high-frame-rate video without increasing lower rates."""
+        settings, result = self._video_result(3840, 2160)
+        settings.videos.limit_to_30_fps = True
+        result.fps = 60000 / 1001
+        self.assertEqual(video_fps_limit(result, settings), 30)
+
+        result.fps = 30000 / 1001
+        self.assertIsNone(video_fps_limit(result, settings))
+        result.fps = 25
+        self.assertIsNone(video_fps_limit(result, settings))
+
+    def test_video_plan_mentions_30_fps_limit_for_60_fps_source(self) -> None:
+        """Dry-run actions should make the enabled frame-rate reduction visible."""
+        settings, result = self._video_result(3840, 2160)
+        settings.videos.limit_to_30_fps = True
+        result.fps = 60
+
+        plan = build_plans([result], settings)[0]
+        descriptions = " ".join(action.description for action in plan.actions)
+
+        self.assertIn("max. 30 fps", descriptions)
+
+    def test_video_plan_omits_30_fps_limit_for_30_fps_source(self) -> None:
+        """A 30-fps source should not be unnecessarily frame-converted."""
+        settings, result = self._video_result(1920, 1080)
+        settings.videos.limit_to_30_fps = True
+        result.fps = 30
+
+        plan = build_plans([result], settings)[0]
+        descriptions = " ".join(action.description for action in plan.actions)
+
+        self.assertNotIn("max. 30 fps", descriptions)
 
     def test_heic_conversion_description_mentions_heic_to_jpeg(self) -> None:
         """HEIC source conversion should be labeled clearly for users."""
@@ -510,6 +590,7 @@ class SettingsPersistenceTests(unittest.TestCase):
                     read_after_exif=True,
                 )
                 original.videos.limit_to_fhd = True
+                original.videos.limit_to_30_fps = True
                 original.metadata.set_filesystem_dates = False
                 original.diff_tools.image = '"imgdiff.exe" $source $target'
                 original.diff_tools.video = '"viddiff.exe" $source $target'
@@ -518,6 +599,7 @@ class SettingsPersistenceTests(unittest.TestCase):
                 loaded = load_settings()
         self.assertTrue(loaded.read_after_exif)
         self.assertTrue(loaded.videos.limit_to_fhd)
+        self.assertTrue(loaded.videos.limit_to_30_fps)
         self.assertFalse(loaded.metadata.set_filesystem_dates)
         self.assertEqual(loaded.diff_tools.image, '"imgdiff.exe" $source $target')
         self.assertEqual(loaded.diff_tools.video, '"viddiff.exe" $source $target')
@@ -2004,6 +2086,31 @@ class ImageConversionOrientationTests(unittest.TestCase):
         vf_index = args.index("-vf")
         self.assertIn("scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease", args[vf_index + 1])
         self.assertIn("format=yuv420p", args[vf_index + 1])
+
+    def test_video_transcode_combines_scale_and_30_fps_in_one_filter_graph(self) -> None:
+        """Resolution, FPS, pixel format, and codec should share one FFmpeg command."""
+        from vmp.tools import transcode_video
+
+        settings = AppSettings()
+        settings.tools.ffmpeg = "ffmpeg"
+        with patch("vmp.tools.video.run_process") as run_process:
+            transcode_video(
+                Path("src.mp4"),
+                Path("dst.mp4"),
+                25,
+                settings,
+                (1920, 1080),
+                max_fps=30,
+            )
+        args = run_process.call_args.args[0]
+        self.assertEqual(args.count("-vf"), 1)
+        filter_graph = args[args.index("-vf") + 1]
+        self.assertEqual(
+            filter_graph,
+            "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,fps=30,format=yuv420p",
+        )
+        self.assertIn("-c:v", args)
+        self.assertEqual(args[args.index("-c:v") + 1], settings.videos.encoder)
 
     def test_video_transcode_drops_alpha_for_x265_even_without_scaling(self) -> None:
         """x265 cannot encode yuva formats, so transcodes should force a non-alpha pixel format."""
