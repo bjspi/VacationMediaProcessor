@@ -17,11 +17,11 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from vmp.core.discovery import discover_media
 from vmp.tools import convert_image, copy_all_metadata, maintain_jpeg, write_metadata
-from vmp.gui.common.plan_display import codec_cell_text
+from vmp.gui.common.plan_display import codec_cell_text, details_markdown
 from vmp.gui.main.window import MainWindow, _missing_pipeline_tools, distribute_column_widths
 from vmp.gui.settings_dialog import SettingsDialog
 from vmp.manifest import write_before_after_manifests
-from vmp.metadata import analyze_item, metadata_write_tags, resolve_timestamp
+from vmp.metadata import analyze_item, evaluate_sanity, metadata_write_tags, resolve_timestamp
 from vmp.core.models import (
     ActionKind,
     AppSettings,
@@ -158,6 +158,135 @@ class TimestampResolutionTests(unittest.TestCase):
         self.assertEqual(resolved.local_dt.strftime("%Y-%m-%d %H:%M:%S"), "2024-01-02 03:04:05")
         self.assertEqual(resolved.confidence, Confidence.MEDIUM)
         self.assertEqual(resolved.source, "System:FileName")
+
+
+class UtcFilenameSanityTests(unittest.TestCase):
+    """UTC-based filenames must not masquerade as local timestamp conflicts."""
+
+    def _analyze(
+        self,
+        filename: str,
+        local_with_offset: str,
+        *,
+        tolerance: int = 180,
+        extra_tags: dict[str, str] | None = None,
+    ) -> tuple[AnalysisResult, AppSettings]:
+        root = Path.cwd()
+        item = MediaItem(root / filename, root, MediaKind.IMAGE)
+        tags = {"Composite:SubSecDateTimeOriginal": local_with_offset}
+        tags.update(extra_tags or {})
+        settings = AppSettings()
+        settings.metadata.sanity_tolerance_seconds = tolerance
+        return analyze_item(item, RawMetadata(str(item.path), tags), settings.metadata), settings
+
+    def test_pixel_utc_filename_is_ok_with_notice_and_local_target(self) -> None:
+        result, settings = self._analyze(
+            "PXL_20260815_080854614.jpg",
+            "2026:08:15 10:08:54.614+02:00",
+        )
+
+        self.assertEqual(result.status, PlanStatus.OK)
+        self.assertFalse(any("Filename timestamp differs" in warning for warning in result.warnings))
+        self.assertEqual(
+            result.notices,
+            ["Dateiname entspricht UTC; für die lokale Zielzeit wird der Offset +02:00 angewendet."],
+        )
+        self.assertEqual(result.resolved.utc_dt, datetime(2026, 8, 15, 8, 8, 54, 614000))
+        self.assertEqual(result.resolved.local_dt, datetime(2026, 8, 15, 10, 8, 54, 614000))
+
+        plan = build_plans([result], settings)[0]
+        self.assertEqual(plan.final_path.name, "20260815_100854.jpg")
+        details = details_markdown(plan, "")
+        self.assertIn("### Hinweise", details)
+        self.assertIn("ℹ️", details)
+        self.assertNotIn("### Warnungen", details)
+
+    def test_non_hour_timezone_offset_is_also_accepted(self) -> None:
+        result, _settings = self._analyze(
+            "IMG_20260815_043854.jpg",
+            "2026:08:15 10:08:54+05:30",
+        )
+
+        self.assertEqual(result.status, PlanStatus.OK)
+        self.assertIn("+05:30", result.notices[0])
+
+    def test_configured_tolerance_controls_utc_filename_match(self) -> None:
+        within, _settings = self._analyze(
+            "IMG_20260815_081054.jpg",
+            "2026:08:15 10:08:54+02:00",
+            tolerance=180,
+        )
+        outside, _settings = self._analyze(
+            "IMG_20260815_081200.jpg",
+            "2026:08:15 10:08:54+02:00",
+            tolerance=180,
+        )
+
+        self.assertEqual(within.status, PlanStatus.OK)
+        self.assertTrue(within.notices)
+        self.assertEqual(outside.status, PlanStatus.WARN)
+        self.assertFalse(outside.notices)
+        self.assertTrue(any("Filename timestamp differs" in warning for warning in outside.warnings))
+
+    def test_filename_mismatch_without_utc_and_offset_remains_warning(self) -> None:
+        root = Path.cwd()
+        item = MediaItem(root / "IMG_20260815_080854.jpg", root, MediaKind.IMAGE)
+        raw = RawMetadata(
+            str(item.path),
+            {"EXIF:DateTimeOriginal": "2026:08:15 10:08:54"},
+        )
+
+        result = analyze_item(item, raw, AppSettings().metadata)
+
+        self.assertEqual(result.status, PlanStatus.WARN)
+        self.assertFalse(result.notices)
+        self.assertTrue(any("Filename timestamp differs" in warning for warning in result.warnings))
+
+    def test_filename_matching_utc_with_inconsistent_offset_remains_warning(self) -> None:
+        root = Path.cwd()
+        raw = RawMetadata(str(root / "IMG_20260815_080854.jpg"), {})
+        resolved = ResolvedTimestamp(
+            local_dt=datetime(2026, 8, 15, 10, 8, 54),
+            utc_dt=datetime(2026, 8, 15, 8, 8, 54),
+            offset=timedelta(hours=1),
+            confidence=Confidence.HIGH,
+        )
+
+        status, warnings = evaluate_sanity(
+            resolved,
+            raw,
+            MediaKind.IMAGE,
+            tolerance_seconds=180,
+            candidates=[],
+            inferred_all=None,
+        )
+
+        self.assertEqual(status, PlanStatus.WARN)
+        self.assertTrue(any("Filename timestamp differs" in warning for warning in warnings))
+
+    def test_independent_gps_conflict_keeps_warn_status(self) -> None:
+        result, _settings = self._analyze(
+            "PXL_20260815_080854614.jpg",
+            "2026:08:15 10:08:54.614+02:00",
+            extra_tags={
+                "GPS:GPSDateStamp": "2026:08:15",
+                "GPS:GPSTimeStamp": "07:00:00",
+            },
+        )
+
+        self.assertEqual(result.status, PlanStatus.WARN)
+        self.assertTrue(result.notices)
+        self.assertFalse(any("Filename timestamp differs" in warning for warning in result.warnings))
+        self.assertTrue(any("GPS UTC differs" in warning for warning in result.warnings))
+
+    def test_local_filename_needs_no_utc_notice(self) -> None:
+        result, _settings = self._analyze(
+            "IMG_20260815_100854.jpg",
+            "2026:08:15 10:08:54+02:00",
+        )
+
+        self.assertEqual(result.status, PlanStatus.OK)
+        self.assertFalse(result.notices)
 
 
 class PlannerTests(unittest.TestCase):

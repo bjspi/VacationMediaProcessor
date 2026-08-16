@@ -77,6 +77,37 @@ def is_plausible_timezone_offset(offset: timedelta) -> bool:
     return abs_minutes % 15 == 0
 
 
+def filename_matches_resolved_utc(
+    resolved: ResolvedTimestamp,
+    metadata: RawMetadata,
+    tolerance_seconds: int,
+) -> bool:
+    """Return True when a differing filename is corroborated as UTC.
+
+    This deliberately requires a complete, high-confidence LOCAL/UTC/OFFSET
+    resolution.  Matching UTC alone is not enough: applying the resolved
+    offset to the filename must also reproduce the resolved local capture
+    time, so unrelated timestamp coincidences continue to surface as warnings.
+    """
+    if (
+        resolved.confidence != Confidence.HIGH
+        or resolved.local_dt is None
+        or resolved.utc_dt is None
+        or resolved.offset is None
+        or not is_plausible_timezone_offset(resolved.offset)
+    ):
+        return False
+    filename_dt = parse_filename_datetime(Path(metadata.source_file).name)
+    if filename_dt is None:
+        return False
+    if seconds_between(filename_dt, resolved.local_dt) <= tolerance_seconds:
+        return False
+    if seconds_between(filename_dt, resolved.utc_dt) > tolerance_seconds:
+        return False
+    expected_local = filename_dt + resolved.offset
+    return seconds_between(expected_local, resolved.local_dt) <= tolerance_seconds
+
+
 def infer_from_all_datetime_values(
     metadata: RawMetadata,
     tolerance_seconds: int,
@@ -455,7 +486,9 @@ def evaluate_sanity(
     filename_dt = parse_filename_datetime(Path(metadata.source_file).name)
     if filename_dt is not None:
         delta = seconds_between(filename_dt, resolved.local_dt)
-        if delta > tolerance_seconds:
+        if delta > tolerance_seconds and not filename_matches_resolved_utc(
+            resolved, metadata, tolerance_seconds
+        ):
             warnings.append(f"Filename timestamp differs by {delta} seconds.")
     gps_date = get_first_str(tags, "GPS:GPSDateStamp", "GPS:GPSDate")
     gps_time = get_first_str(tags, "GPS:GPSTimeStamp")

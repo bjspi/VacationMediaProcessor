@@ -62,6 +62,18 @@ class CatalogTests(unittest.TestCase):
         finally:
             i18n.init_language("de")
 
+    def test_utc_filename_notice_translates_to_english(self) -> None:
+        source = "Dateiname entspricht UTC; für die lokale Zielzeit wird der Offset {offset} angewendet."
+        try:
+            i18n.init_language("en")
+            translated = tr(source).format(offset="+02:00")
+            self.assertEqual(
+                translated,
+                "Filename timestamp matches UTC; offset +02:00 is applied for the local target time.",
+            )
+        finally:
+            i18n.init_language("de")
+
 
 if __name__ == "__main__":
     unittest.main()

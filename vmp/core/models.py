@@ -240,6 +240,7 @@ class AnalysisResult:
     codec: str | None = None
     fps: float | None = None
     has_depth: bool = False
+    notices: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

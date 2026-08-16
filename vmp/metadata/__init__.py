@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ..core.i18n import tr
 from ..core.logging_config import get_logger
 from ..core.models import (
     AnalysisResult,
@@ -66,6 +67,7 @@ from ..timestamps.resolution import (  # noqa: F401
     choose_date_only,
     collect_datetime_value_pool,
     evaluate_sanity,
+    filename_matches_resolved_utc,
     infer_from_all_datetime_values,
     infer_local_utc_offset_from_spread,
     is_core_metadata_datetime_key,
@@ -184,6 +186,14 @@ def analyze_item(item: MediaItem, raw: RawMetadata, settings: MetadataSettings) 
         resolved, raw, item.kind, tolerance, candidates=candidates, inferred_all=inferred_all
     )
     warnings = [*resolved.warnings, *warnings]
+    notices: list[str] = []
+    if filename_matches_resolved_utc(resolved, raw, tolerance):
+        assert resolved.offset is not None
+        notices.append(
+            tr("Dateiname entspricht UTC; für die lokale Zielzeit wird der Offset {offset} angewendet.").format(
+                offset=format_offset(resolved.offset)
+            )
+        )
     if resolved.local_dt and settings.range_start and resolved.local_dt < settings.range_start:
         warnings.append("Capture date is before the configured run date range.")
         status = PlanStatus.WARN
@@ -200,7 +210,18 @@ def analyze_item(item: MediaItem, raw: RawMetadata, settings: MetadataSettings) 
     # so the pipeline enriches it with FFprobe's actual stream codec_name.
     codec = _str_tag(tags, ("QuickTime:CompressorID", "QuickTime:CompressorName"))
     has_depth = _detect_depth(tags)
-    return AnalysisResult(item=item, metadata=raw, resolved=resolved, status=status, warnings=warnings, width=width, height=height, codec=codec, has_depth=has_depth)
+    return AnalysisResult(
+        item=item,
+        metadata=raw,
+        resolved=resolved,
+        status=status,
+        warnings=warnings,
+        notices=notices,
+        width=width,
+        height=height,
+        codec=codec,
+        has_depth=has_depth,
+    )
 
 
 def _detect_depth(tags: dict[str, Any]) -> bool:

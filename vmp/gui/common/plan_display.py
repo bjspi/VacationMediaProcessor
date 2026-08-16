@@ -62,6 +62,9 @@ def details_markdown(plan: MediaPlan, bucket: str) -> str:
         ]
     else:
         lines.append(tr("_Keine Aktionen geplant._"))
+    if result.notices:
+        lines += ["", tr("### Hinweise")]
+        lines += [f"- ℹ️ {notice}" for notice in result.notices]
     if result.warnings:
         lines += ["", tr("### Warnungen")]
         lines += [f"- ⚠️ {warning}" for warning in result.warnings]
