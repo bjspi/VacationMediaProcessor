@@ -248,26 +248,30 @@ class BadgeHeaderButton(QPushButton):
 
     def __init__(self, badge_text: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._badge = QLabel(badge_text, self)
+        self._badge = QLabel("", self)
         self._badge.setObjectName("badgeBubble")
         self._badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._badge.setFixedSize(18, 18)
-        self._badge.raise_()
+        self.set_badge_text(badge_text)
 
     def set_badge_text(self, text: str) -> None:
         """Update the badge text and reposition the overlay.
 
-        Large counts are capped to ``99+`` and the bubble width is bounded so it
-        never grows wider than the button and spills out to the right.
+        Zero (and negative) numeric counts are hidden. Large counts are capped
+        to ``99+`` and the bubble width is bounded so it never grows wider than
+        the button and spills out to the right.
         """
         display = text
+        count: int | None = None
         try:
-            if int(text) > 99:
+            count = int(text)
+            if count > 99:
                 display = "99+"
         except (TypeError, ValueError):
             pass
         self._badge.setText(display)
+        self._badge.setVisible(count is None or count > 0)
         self._badge.adjustSize()
         width = max(18, min(self._badge.sizeHint().width() + 6, 28))
         self._badge.setFixedSize(width, 18)
