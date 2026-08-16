@@ -34,7 +34,7 @@ def _reverse_geocode_uncached(lat: float, lon: float, timeout: float) -> str | N
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             data = json.loads(response.read().decode("utf-8"))
-    except Exception:  # noqa: BLE001
+    except Exception:
         LOGGER.debug("Reverse geocode failed for %s,%s", lat, lon, exc_info=True)
         return None
     address = data.get("address", {})

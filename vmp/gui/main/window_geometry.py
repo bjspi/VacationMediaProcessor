@@ -25,7 +25,7 @@ class WindowGeometryMixin:
             return False
         try:
             return bool(self.restoreGeometry(QByteArray.fromBase64(blob.encode("ascii"))))
-        except Exception:  # noqa: BLE001
+        except Exception:
             LOGGER.debug("Could not restore main window geometry", exc_info=True)
             return False
 

@@ -77,7 +77,7 @@ def heic_to_qimage(path: Path, size: int) -> QImage | None:
             im.thumbnail((size, size))
             qimage = QImage(im.tobytes("raw", "RGBA"), im.width, im.height, QImage.Format.Format_RGBA8888)
             return qimage.copy()
-    except Exception:  # noqa: BLE001
+    except Exception:
         LOGGER.debug("HEIC thumbnail failed for %s", path, exc_info=True)
         return None
 
@@ -99,12 +99,19 @@ def video_frame_thumb(path: Path, ffmpeg: str | None, size: int, seek: str | Non
             args += ["-ss", seek]
         scale = f"scale='min({size},iw)':'min({size},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2"
         args += ["-i", str(path), "-frames:v", "1", "-vf", scale, str(tmp_path)]
-        subprocess.run(args, capture_output=True, text=True, timeout=15, creationflags=NO_WINDOW_CREATIONFLAGS)
+        subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            creationflags=NO_WINDOW_CREATIONFLAGS,
+            check=False,
+        )
         if not tmp_path.exists() or tmp_path.stat().st_size == 0:
             return None
         image = QImage(str(tmp_path))
         return image if not image.isNull() else None
-    except Exception:  # noqa: BLE001
+    except Exception:
         LOGGER.debug("Video thumbnail failed for %s", path, exc_info=True)
         return None
     finally:
@@ -292,6 +299,6 @@ class ThumbnailService:
                         image.save(str(disk_path), "PNG")
                 if self._cache_mode in {"ram", "disk"}:
                     self._memory_cache.put(key, image)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 LOGGER.debug("Thumbnail decode error for %s", path, exc_info=True)
             self._relay.ready.emit(str(path), image, token)

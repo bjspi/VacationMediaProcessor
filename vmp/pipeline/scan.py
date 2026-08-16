@@ -9,9 +9,7 @@ from pathlib import Path
 
 from ..core.discovery import discover_media, normalize_root
 from ..core.i18n import tr
-from ..tools import probe_video
 from ..core.logging_config import get_logger
-from ..metadata import analyze_item, read_metadata_batch
 from ..core.models import (
     AnalysisResult,
     AppSettings,
@@ -22,6 +20,9 @@ from ..core.models import (
     PlanStatus,
     RawMetadata,
 )
+from ..metadata import analyze_item, read_metadata_batch
+from ..planner import build_plans
+from ..tools import probe_video
 from .shared import (
     CancelCallback,
     ProgressCallback,
@@ -30,7 +31,6 @@ from .shared import (
     emit,
     raise_if_cancelled,
 )
-from ..planner import build_plans
 
 LOGGER = get_logger(__name__)
 

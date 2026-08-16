@@ -8,13 +8,20 @@ from pathlib import Path
 
 from PyQt6.QtCore import QByteArray, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QPainter, QPixmap
-from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...core.i18n import tr
-from ..common.file_transfer import open_in_default_app
-from .row import PairRow
-from ..common.thumbnails import decode_thumb
 from ...pair_cleanup import PairCandidate
+from ..common.file_transfer import open_in_default_app
+from ..common.thumbnails import decode_thumb
+from .row import PairRow
 
 LOGGER = logging.getLogger("vmp.gui.pairs.viewer")
 
@@ -89,7 +96,7 @@ class PairViewer(QDialog):
         if geometry:
             try:
                 self.restoreGeometry(QByteArray.fromBase64(geometry.encode("ascii")))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 LOGGER.debug("Could not restore pair viewer geometry", exc_info=True)
         # Decode both full images off the GUI thread; two large HEICs would
         # otherwise block the event loop for seconds behind the "lädt…" labels.

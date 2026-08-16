@@ -6,7 +6,6 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from vmp.metadata import _detect_depth
 from vmp.core.models import (
     AnalysisResult,
     ApplyMode,
@@ -18,6 +17,7 @@ from vmp.core.models import (
     RawMetadata,
     ResolvedTimestamp,
 )
+from vmp.metadata import _detect_depth
 from vmp.pair_cleanup import find_pairs
 from vmp.planner import final_extension, keeps_depth_heic, needs_image_conversion
 

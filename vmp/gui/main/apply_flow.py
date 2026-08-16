@@ -7,10 +7,16 @@ from PyQt6.QtWidgets import QMessageBox
 
 from ...core.discovery import normalize_root
 from ...core.i18n import tr
+from ...core.logging_config import get_logger
+from ...core.models import (
+    ApplyItemUpdate,
+    MediaKind,
+    MediaPlan,
+    PipelineReport,
+    PlanStatus,
+)
 from ..common.file_transfer import path_key, same_path
 from ..workers import ApplyWorker, JpegMaintenanceWorker
-from ...core.logging_config import get_logger
-from ...core.models import ApplyItemUpdate, MediaKind, MediaPlan, PipelineReport, PlanStatus
 
 LOGGER = get_logger(__name__)
 

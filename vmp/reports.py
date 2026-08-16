@@ -5,8 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from .core.i18n import tr
+from .core.models import (
+    ActionKind,
+    AnalysisResult,
+    AppSettings,
+    MediaKind,
+    MediaPlan,
+    PlanStatus,
+)
 from .metadata import has_exif_datetime_values, missing_exif_suggestion
-from .core.models import ActionKind, AnalysisResult, AppSettings, MediaKind, MediaPlan, PlanStatus
 from .planner import crf_for_video, video_bucket_label
 
 

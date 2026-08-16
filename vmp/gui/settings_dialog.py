@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QComboBox,
     QDialog,
-    QStyle,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -19,6 +18,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QStyle,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -26,8 +26,8 @@ from PyQt6.QtWidgets import (
 
 from ..core.i18n import tr
 from ..core.logging_config import get_logger
-from ..core.processes import command_template_error, launch_gui_tool, resolve_executable
 from ..core.models import AppSettings
+from ..core.processes import command_template_error, launch_gui_tool, resolve_executable
 from ..core.settings import save_settings
 
 LOGGER = get_logger(__name__)
@@ -138,7 +138,7 @@ class SettingsDialog(QDialog):
         self.lasso_cache_combo.addItem("Disk", "disk")
         self.lasso_cache_combo.addItem(tr("Aus"), "off")
         cache_index = self.lasso_cache_combo.findData(self._settings.lasso_thumbnail_cache_mode)
-        self.lasso_cache_combo.setCurrentIndex(cache_index if cache_index >= 0 else 0)
+        self.lasso_cache_combo.setCurrentIndex(max(cache_index, 0))
         self.image_workers_spin = QSpinBox()
         self.image_workers_spin.setRange(1, 16)
         self.image_workers_spin.setValue(self._settings.images.parallel_workers)
@@ -214,7 +214,7 @@ class SettingsDialog(QDialog):
         self.folder_drop_combo.addItem(tr("Ordner ergänzen"), "add")
         self.folder_drop_combo.addItem(tr("Vorhandene Liste ersetzen"), "replace")
         drop_index = self.folder_drop_combo.findData(self._settings.folder_drop_behavior)
-        self.folder_drop_combo.setCurrentIndex(drop_index if drop_index >= 0 else 0)
+        self.folder_drop_combo.setCurrentIndex(max(drop_index, 0))
         self.folder_drop_combo.setToolTip(
             tr("Legt fest, was beim Drag & Drop von Ordnern auf eine bereits geöffnete Dateiliste passiert.")
         )

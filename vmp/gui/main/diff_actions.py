@@ -10,10 +10,14 @@ from PyQt6.QtWidgets import QMessageBox
 
 from ...core.discovery import normalize_root
 from ...core.i18n import tr
-from ..common.backup_discovery import discover_backup_path_for_plan
 from ...core.logging_config import get_logger
 from ...core.models import MediaKind, MediaPlan, PlanStatus
-from ...core.processes import expand_command_template, launch_command_template, run_process
+from ...core.processes import (
+    expand_command_template,
+    launch_command_template,
+    run_process,
+)
+from ..common.backup_discovery import discover_backup_path_for_plan
 
 LOGGER = get_logger(__name__)
 
@@ -182,7 +186,7 @@ class DiffActionsMixin:
             before_path, after_path = self._write_row_exif_snapshots(plan, backup)
             launch_command_template(template, source=before_path, target=after_path)
             return True
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             LOGGER.exception("Could not launch ExifTool text diff for row=%s", row)
             QMessageBox.warning(self, tr("ExifTool -> Textdiff"), tr("Konnte Textdiff nicht starten:\n{error}").format(error=exc))
             return True

@@ -6,7 +6,15 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QHBoxLayout, QFrame, QLabel, QPushButton, QStyle, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QStyle,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ...core.i18n import tr
 from ..common.theme import app_icon_path
@@ -26,7 +34,7 @@ def _style_header_button(button: QPushButton) -> None:
     button.setIconSize(QSize(20, 20))
 
 
-def build_header(window: "MainWindow") -> QWidget:
+def build_header(window: MainWindow) -> QWidget:
     """Create the header bar; every action button is attached to ``window``."""
     header = QFrame()
     header.setObjectName("header")

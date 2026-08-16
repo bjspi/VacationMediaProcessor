@@ -72,7 +72,7 @@ class DayHistogramWidget(QWidget):
         index = max(0, min(len(self._buckets) - 1, index))
         return self._buckets[index].day
 
-    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def paintEvent(self, event) -> None:
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -114,7 +114,7 @@ class DayHistogramWidget(QWidget):
         painter.drawText(8, self.height() - 8, first)
         painter.drawText(self.width() - painter.fontMetrics().horizontalAdvance(last) - 8, self.height() - 8, last)
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mousePressEvent(self, event) -> None:
         if event.button() != Qt.MouseButton.LeftButton:
             super().mousePressEvent(event)
             return
@@ -130,7 +130,7 @@ class DayHistogramWidget(QWidget):
             self._last_anchor = day
         self._emit_selection()
 
-    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mouseMoveEvent(self, event) -> None:
         if self._paint_state is None or not (event.buttons() & Qt.MouseButton.LeftButton):
             super().mouseMoveEvent(event)
             return
@@ -141,7 +141,7 @@ class DayHistogramWidget(QWidget):
         self._last_anchor = day
         self._emit_selection()
 
-    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mouseReleaseEvent(self, event) -> None:
         self._paint_state = None
         super().mouseReleaseEvent(event)
 

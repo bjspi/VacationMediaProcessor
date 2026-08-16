@@ -11,12 +11,12 @@ from PyQt6.QtCore import QPoint
 from PyQt6.QtWidgets import QMenu, QMessageBox
 
 from ...core.i18n import tr
+from ...core.logging_config import get_logger
+from ...core.models import AnalysisResult, MediaKind, MediaPlan, PlanStatus
+from ...metadata import gps_coordinates
 from ..common.file_transfer import path_key, same_path
 from ..common.plan_display import details_markdown, video_bucket_label_text
 from ..common.widgets import MediaTableColumns
-from ...core.logging_config import get_logger
-from ...metadata import gps_coordinates
-from ...core.models import AnalysisResult, MediaKind, MediaPlan, PlanStatus
 
 LOGGER = get_logger(__name__)
 
@@ -109,9 +109,9 @@ class TableActionsMixin:
         """Open the containing folder and select the file when possible."""
         try:
             if os.name == "nt":
-                subprocess.Popen(["explorer", "/select,", str(path)])  # noqa: S603
+                subprocess.Popen(["explorer", "/select,", str(path)])
             else:
-                subprocess.Popen(["xdg-open", str(path.parent)])  # noqa: S603
+                subprocess.Popen(["xdg-open", str(path.parent)])
         except OSError as exc:
             QMessageBox.warning(self, "Explorer", tr("Konnte Ordner nicht öffnen:\n{path}\n\n{error}").format(path=path, error=exc))
 
@@ -122,7 +122,7 @@ class TableActionsMixin:
             if os.name == "nt":
                 os.startfile(str(path))  # type: ignore[attr-defined]
             else:
-                subprocess.Popen(["xdg-open", str(path)])  # noqa: S603
+                subprocess.Popen(["xdg-open", str(path)])
         except OSError as exc:
             LOGGER.error("Could not open file '%s': %s", path, exc)
             QMessageBox.warning(

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from ..common.plan_display import human_size
 from ...core.i18n import tr
 from ...core.logging_config import get_logger
 from ...core.models import MediaKind
 from ...pair_cleanup import find_pairs
 from ...reports import missing_exif_rows
+from ..common.plan_display import human_size
 
 LOGGER = get_logger(__name__)
 
@@ -77,7 +77,7 @@ class StatusStatsMixin:
         """Show the count of IMG_/IMG_E duplicate pairs on the pairs button."""
         try:
             count = len(find_pairs(self.results))
-        except Exception:  # noqa: BLE001
+        except Exception:
             LOGGER.debug("Pair badge update failed", exc_info=True)
             count = 0
         self.pairs_button.set_badge_text(str(count))

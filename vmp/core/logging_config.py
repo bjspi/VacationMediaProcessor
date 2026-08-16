@@ -25,7 +25,7 @@ class _ResilientRotatingFileHandler(RotatingFileHandler):
     ``maxBytes`` while locked.
     """
 
-    def doRollover(self) -> None:  # noqa: D102
+    def doRollover(self) -> None:
         try:
             super().doRollover()
         except OSError:
@@ -149,7 +149,7 @@ def remove_run_file_handler(handler: logging.Handler | None) -> None:
     logger.removeHandler(handler)
     try:
         handler.close()
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110 - logging cleanup must not escape
         pass
 
 
@@ -182,7 +182,7 @@ def log_to_file(
                     exc_info=exc_tuple,
                 )
                 handler.emit(record)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110 - emergency logging must not recurse
                 pass
 
 
@@ -206,7 +206,7 @@ class GuiLogHandler(logging.Handler):
         try:
             msg = self.format(record)
             self.callback(msg)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - logging callbacks are external boundaries
             self.handleError(record)
             # Write the failure into the log file directly
             log_to_file(

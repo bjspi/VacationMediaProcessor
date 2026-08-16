@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 from ..core.logging_config import get_logger
-from ..core.models import AnalysisResult, ApplyItemUpdate, MediaPlan, Phase, PipelineProgress
+from ..core.models import (
+    AnalysisResult,
+    ApplyItemUpdate,
+    MediaPlan,
+    Phase,
+    PipelineProgress,
+)
 from ..core.processes import resolve_executable
 
 ProgressCallback = Callable[[PipelineProgress], None]

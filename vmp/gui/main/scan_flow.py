@@ -9,10 +9,10 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
 from ...core.discovery import discover_media, normalize_root
 from ...core.i18n import tr
-from ..workers import ScanWorker
 from ...core.logging_config import get_logger
 from ...core.models import AnalysisResult, MediaItem, MediaKind, MediaPlan
 from ...reports import vacation_span_warning
+from ..workers import ScanWorker
 
 LOGGER = get_logger(__name__)
 
@@ -220,7 +220,7 @@ class ScanFlowMixin:
         try:
             for root in roots:
                 items.extend(discover_media(root, recursive=self.settings_model.recursive))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             LOGGER.exception("Could not discover media for folder batch: %s", roots)
             QMessageBox.critical(self, tr("Dateiliste"), str(exc))
             return

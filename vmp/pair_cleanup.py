@@ -159,13 +159,13 @@ def _load_gray_array_with_size(path: Path, long_edge: int = 320):
             import pillow_heif
 
             pillow_heif.register_heif_opener()
-        except Exception:
+        except Exception:  # noqa: BLE001 - optional decoder boundary
             return None, None
     try:
         img = Image.open(str(path))
         img = ImageOps.exif_transpose(img)
         img = img.convert("L")
-    except Exception:
+    except Exception:  # noqa: BLE001 - malformed image data must only skip this pair
         return None, None
     w, h = img.size
     scale = long_edge / max(w, h)
@@ -201,8 +201,7 @@ def _ncc_max(big, small) -> float:
             if denom == 0:
                 continue
             val = float((win * t).sum() / denom)
-            if val > best:
-                best = val
+            best = max(best, val)
         if best >= 0.999:
             break
     return best
@@ -279,8 +278,7 @@ def confirm_contained_from_arrays(
                 dtype=np.float64,
             )
         score = _ncc_max(big, tmpl)
-        if score > best:
-            best = score
+        best = max(best, score)
         if best >= CONTAINMENT_NCC_THRESHOLD:
             break
     return best >= CONTAINMENT_NCC_THRESHOLD, best

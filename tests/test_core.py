@@ -10,45 +10,69 @@ import unittest
 from concurrent.futures import Future
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from vmp.core.discovery import discover_media
-from vmp.tools import convert_image, copy_all_metadata, maintain_jpeg, write_metadata
-from vmp.gui.common.plan_display import codec_cell_text, details_markdown
-from vmp.gui.main.window import MainWindow, _missing_pipeline_tools, distribute_column_widths
-from vmp.gui.settings_dialog import SettingsDialog
-from vmp.manifest import write_before_after_manifests
-from vmp.metadata import analyze_item, evaluate_sanity, metadata_write_tags, resolve_timestamp
 from vmp.core.models import (
     ActionKind,
-    AppSettings,
+    AnalysisResult,
     ApplyItemUpdate,
     ApplyMode,
+    AppSettings,
     Confidence,
     MediaItem,
     MediaKind,
-    AnalysisResult,
     MediaPlan,
     PlannedAction,
     PlanStatus,
     RawMetadata,
     ResolvedTimestamp,
 )
-from vmp.core.processes import command_template_error, expand_command_template, launch_command_template
-from vmp.planner import build_plans
+from vmp.core.processes import (
+    command_template_error,
+    expand_command_template,
+    launch_command_template,
+)
+from vmp.core.settings import load_settings, save_settings
+from vmp.gui.common.plan_display import codec_cell_text, details_markdown
+from vmp.gui.main.window import (
+    MainWindow,
+    _missing_pipeline_tools,
+    distribute_column_widths,
+)
+from vmp.gui.settings_dialog import SettingsDialog
+from vmp.manifest import write_before_after_manifests
+from vmp.metadata import (
+    analyze_item,
+    evaluate_sanity,
+    metadata_write_tags,
+    resolve_timestamp,
+)
+from vmp.pipeline import (
+    _cleanup_empty_generated_dirs,
+    apply_plans,
+    maintain_jpegs,
+    scan_and_plan,
+)
+from vmp.pipeline.scan import _enrich_video_with_ffprobe, _safe_frame_rate
 from vmp.planner import (
+    build_plans,
     crf_for_video,
     video_bucket,
     video_bucket_label,
     video_fps_limit,
 )
-from vmp.pipeline import _cleanup_empty_generated_dirs, apply_plans, maintain_jpegs, scan_and_plan
-from vmp.pipeline.scan import _enrich_video_with_ffprobe, _safe_frame_rate
-from vmp.reports import display_video_codec, plan_action_summary, preview_row, resolution_class
-from vmp.core.settings import load_settings, save_settings
+from vmp.reports import (
+    display_video_codec,
+    plan_action_summary,
+    preview_row,
+    resolution_class,
+)
+from vmp.tools import convert_image, copy_all_metadata, maintain_jpeg, write_metadata
 
 
 class TimestampResolutionTests(unittest.TestCase):
@@ -1668,7 +1692,7 @@ class ApplyParallelismTests(unittest.TestCase):
     def test_image_plans_use_executor_and_videos_stay_serial(self) -> None:
         """Image plans should go through the bounded pool before serial video work starts."""
         class FakeExecutor:
-            instances = []
+            instances: ClassVar[list[FakeExecutor]] = []
 
             def __init__(self, max_workers: int) -> None:
                 self.max_workers = max_workers
@@ -2342,9 +2366,9 @@ class IdempotencyTests(unittest.TestCase):
 class ColumnWidthDistributionTests(unittest.TestCase):
     """Priority-based fit-to-width for the media table columns."""
 
-    DESIRED = {"a": 100, "b": 100, "action": 200}
-    MINS = {"a": 40, "b": 40, "action": 60}
-    PRIO = {"a": 0, "b": 1, "action": 5}
+    DESIRED: ClassVar[dict[str, int]] = {"a": 100, "b": 100, "action": 200}
+    MINS: ClassVar[dict[str, int]] = {"a": 40, "b": 40, "action": 60}
+    PRIO: ClassVar[dict[str, int]] = {"a": 0, "b": 1, "action": 5}
 
     def test_surplus_goes_to_absorber(self) -> None:
         widths = distribute_column_widths(self.DESIRED, self.MINS, self.PRIO, 500, "action")
@@ -2472,8 +2496,8 @@ class MetadataBatchRobustnessTests(unittest.TestCase):
     """A failed ExifTool batch must degrade to SKIP, not crash the scan."""
 
     def _run(self, returncode: int, stdout: str) -> dict:
-        from vmp.metadata import read_metadata_batch
         from vmp.core.processes import ProcessResult
+        from vmp.metadata import read_metadata_batch
 
         root = Path.cwd()
         items = [MediaItem(root / f"img{i}.jpg", root, MediaKind.IMAGE) for i in range(3)]

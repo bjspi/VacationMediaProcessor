@@ -8,20 +8,20 @@ the package's public API.
 
 from __future__ import annotations
 
-from datetime import datetime
 import os
+from datetime import datetime
 from pathlib import Path
 
+from ..core.logging_config import get_logger
+from ..core.models import AnalysisResult, AppSettings, MediaKind
+from ..core.processes import run_process
+from ..metadata import metadata_write_tags
 from .image import (  # noqa: F401
     _output_needs_orientation_fix,
     convert_image,
     embed_gdepth,
     maintain_jpeg,
 )
-from ..core.logging_config import get_logger
-from ..metadata import metadata_write_tags
-from ..core.models import AnalysisResult, AppSettings, MediaKind
-from ..core.processes import run_process
 from .video import (  # noqa: F401
     MP4_COPY_SAFE_AUDIO_CODECS,
     _audio_transcode_args,

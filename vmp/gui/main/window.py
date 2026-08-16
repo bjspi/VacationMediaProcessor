@@ -15,17 +15,35 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
-from .apply_flow import ApplyFlowMixin
-from .diff_actions import DiffActionsMixin
+from ...core.i18n import init_language, tr
+from ...core.logging_config import (
+    configure_logging,
+    get_logger,
+    log_path,
+    log_to_file,
+    setup_gui_logging,
+)
+from ...core.models import (
+    AnalysisResult,
+    ApplyMode,
+    AppSettings,
+    Confidence,
+    MediaItem,
+    MediaKind,
+    MediaPlan,
+    PlanStatus,
+    RawMetadata,
+    ResolvedTimestamp,
+)
+from ...core.processes import (
+    launch_gui_tool,
+    resolve_executable,
+)
+from ...core.settings import load_settings, save_settings
+from ...metadata import analyze_item
+from ...planner import build_plans
+from ...reports import export_excel_report, missing_exif_rows
 from ..common.dialogs import show_missing_exif_dialog
-from .layout import build_log_dock, build_ui
-from .scan_flow import ScanFlowMixin
-from .status_stats import StatusStatsMixin
-from .table_actions import TableActionsMixin
-from .worker_lifecycle import WorkerLifecycleMixin
-from .overlay_flow import OverlayFlowMixin
-from .window_geometry import WindowGeometryMixin
-from .workflow_panel import WorkflowSettingsMixin
 from ..common.theme import (
     FastTooltipStyle,
     app_icon_path,
@@ -36,30 +54,17 @@ from ..common.widgets import (
     LogRelay,
     distribute_column_widths,  # noqa: F401  (re-exported for tests/back-compat)
 )
-
 from ..settings_dialog import SettingsDialog
-from ...core.processes import (
-    launch_gui_tool,
-    resolve_executable,
-)
-from ...core.logging_config import configure_logging, get_logger, log_path, log_to_file, setup_gui_logging
-from ...core.models import (
-    AnalysisResult,
-    AppSettings,
-    ApplyMode,
-    Confidence,
-    MediaItem,
-    MediaKind,
-    MediaPlan,
-    PlanStatus,
-    RawMetadata,
-    ResolvedTimestamp,
-)
-from ...reports import export_excel_report, missing_exif_rows
-from ...metadata import analyze_item
-from ...planner import build_plans
-from ...core.i18n import init_language, tr
-from ...core.settings import load_settings, save_settings
+from .apply_flow import ApplyFlowMixin
+from .diff_actions import DiffActionsMixin
+from .layout import build_log_dock, build_ui
+from .overlay_flow import OverlayFlowMixin
+from .scan_flow import ScanFlowMixin
+from .status_stats import StatusStatsMixin
+from .table_actions import TableActionsMixin
+from .window_geometry import WindowGeometryMixin
+from .worker_lifecycle import WorkerLifecycleMixin
+from .workflow_panel import WorkflowSettingsMixin
 
 LOGGER = get_logger(__name__)
 
@@ -349,7 +354,7 @@ class MainWindow(
             if self.log_text is None:
                 return
             self.log_text.appendPlainText(message)
-        except Exception:
+        except Exception:  # noqa: BLE001 - never let optional GUI logging crash the app
             log_to_file("_append_log_impl crashed, GUI log panel unavailable")
 
     def launch_configured_tool(self, executable: str, display_name: str, pass_root: bool) -> None:
@@ -383,7 +388,7 @@ class MainWindow(
             process = launch_gui_tool(resolved, extra_args)
             LOGGER.info("Launch handed to OS for %s pid=%s", display_name, process.pid)
         except OSError as exc:
-            LOGGER.exception("%s could not be launched: %s", display_name, exc)
+            LOGGER.exception("%s could not be launched", display_name)
             QMessageBox.critical(
                 self, display_name,
                 tr("{display_name} konnte nicht gestartet werden:\n{error}").format(display_name=display_name, error=exc),
@@ -394,7 +399,7 @@ class MainWindow(
         path = configure_logging() or log_path()
         try:
             path.touch(exist_ok=True)
-            os.startfile(path)  # type: ignore[attr-defined]  # noqa: S606
+            os.startfile(path)  # type: ignore[attr-defined]
         except OSError as exc:
             QMessageBox.critical(self, "Logfile", tr("Logfile konnte nicht geöffnet werden:\n{path}\n\n{error}").format(path=path, error=exc))
 

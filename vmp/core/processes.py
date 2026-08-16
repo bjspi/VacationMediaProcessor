@@ -8,10 +8,10 @@ import shutil
 import subprocess
 import tempfile
 import threading
-from string import Template
-from threading import Lock
 from dataclasses import dataclass
 from pathlib import Path
+from string import Template
+from threading import Lock
 
 from .i18n import tr
 from .logging_config import get_logger
@@ -78,7 +78,7 @@ def kill_active_processes() -> int:
             else:
                 proc.kill()
             killed += 1
-        except Exception:  # noqa: BLE001
+        except Exception:
             LOGGER.exception("Failed to kill external process pid=%s", getattr(proc, "pid", None))
     return killed
 
@@ -200,7 +200,7 @@ def launch_command_template(template: str, *, source: Path, target: Path) -> sub
             text=True,
             encoding="utf-8",
             errors="replace",
-        )  # noqa: S603
+        )
     except OSError as exc:
         stdout_file.close()
         stderr_file.close()
@@ -230,7 +230,7 @@ def launch_gui_tool(executable: str, extra_args: list[str] | None = None) -> sub
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # type: ignore[attr-defined]
         startupinfo.wShowWindow = 1  # SW_SHOWNORMAL
     LOGGER.info("Launching GUI tool command=%s cwd=%s", command, executable_path.parent)
-    return subprocess.Popen(  # noqa: S603
+    return subprocess.Popen(
         command,
         cwd=str(executable_path.parent),
         startupinfo=startupinfo,
@@ -274,7 +274,7 @@ def _log_if_process_exits_quickly(
                 stderr,
             )
             _cleanup_logs()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110 - best-effort daemon diagnostics
             pass
 
     threading.Thread(target=_watch, name="vmp-diff-launch-watch", daemon=True).start()

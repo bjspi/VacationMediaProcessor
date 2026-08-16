@@ -10,15 +10,15 @@ from pathlib import Path
 from PyQt6.QtGui import QImage
 
 from vmp.gui.lasso.dialog import (
-    _parent_directory,
-    _remaining_records,
-    _DayHistogramWidget,
-    _ThumbRelay,
-    _ThumbStrip,
-    _thumb_cache_key,
-    _unique_target,
     LassoDialog,
     ThumbnailService,
+    _DayHistogramWidget,
+    _parent_directory,
+    _remaining_records,
+    _thumb_cache_key,
+    _ThumbRelay,
+    _ThumbStrip,
+    _unique_target,
     perform_transfer,
 )
 from vmp.gui.lasso.trip_selection import (

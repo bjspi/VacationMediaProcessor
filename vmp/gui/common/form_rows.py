@@ -14,8 +14,8 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )

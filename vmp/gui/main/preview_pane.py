@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Callable
+from collections.abc import Callable
 
 from PyQt6.QtGui import QImage, QPixmap
 
 from ...core.i18n import tr
+from ...core.models import MediaKind, MediaPlan
 from ..common.thumbnails import (
     HEIC_SUFFIXES,
     VIDEO_SUFFIXES,
@@ -17,7 +18,6 @@ from ..common.thumbnails import (
     video_frame_thumb,
 )
 from ..common.widgets import AspectRatioPreview, PreviewRelay
-from ...core.models import MediaKind, MediaPlan
 
 LOGGER = logging.getLogger("vmp.gui.main.preview_pane")
 
@@ -66,7 +66,7 @@ class PreviewController:
         image = None
         try:
             image = self._decode(plan)
-        except Exception:  # noqa: BLE001
+        except Exception:
             LOGGER.warning("Preview decode failed for %s", plan.analysis.item.path, exc_info=True)
         self._relay.ready.emit(token, image)
 

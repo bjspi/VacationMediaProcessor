@@ -10,12 +10,12 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtGui import QImage
 
-from ..common.thumbnails import decode_thumb
 from ...pair_cleanup import (
     PairCandidate,
     confirm_contained,
     confirm_contained_from_arrays,
 )
+from ..common.thumbnails import decode_thumb
 
 LOGGER = logging.getLogger("vmp.gui.pairs.worker")
 
@@ -39,7 +39,7 @@ def _qimage_to_gray(image: QImage | None):
         # Account for per-row padding (bytesPerLine) before cropping to width.
         arr = np.frombuffer(ptr, np.uint8).reshape((h, gray.bytesPerLine()))[:, :w]
         return arr.astype(np.float64)
-    except Exception:  # noqa: BLE001
+    except Exception:
         LOGGER.debug("QImage->gray conversion failed", exc_info=True)
         return None
 
@@ -128,7 +128,7 @@ class PairWorker(QObject):
                         )
                     else:
                         contained, ncc = confirm_contained(pair.bigger_path, pair.smaller_path)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     LOGGER.debug("Containment check failed for %s", pair.smaller_path, exc_info=True)
                     contained, ncc = False, -1.0
                 self.confirm_ready.emit(row, contained, ncc)

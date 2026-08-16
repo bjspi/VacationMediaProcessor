@@ -8,7 +8,14 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from ..core.logging_config import get_logger
-from ..core.models import AnalysisResult, AppSettings, ApplyItemUpdate, MediaItem, MediaPlan, PipelineProgress
+from ..core.models import (
+    AnalysisResult,
+    ApplyItemUpdate,
+    AppSettings,
+    MediaItem,
+    MediaPlan,
+    PipelineProgress,
+)
 from ..pipeline import apply_plans, maintain_jpegs, scan_and_plan, scan_items_and_plan
 
 LOGGER = get_logger(__name__)
@@ -51,7 +58,7 @@ class ScanWorker(QObject):
                 )
             LOGGER.info("ScanWorker finished with results=%s plans=%s", len(results), len(plans))
             self.finished.emit(results, plans)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             LOGGER.exception("ScanWorker failed")
             self.failed.emit(str(exc))
 
@@ -113,7 +120,7 @@ class ApplyWorker(QObject):
                 len(report.errors),
             )
             self.finished.emit(report)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             LOGGER.exception("ApplyWorker failed")
             self.failed.emit(str(exc))
 
@@ -162,7 +169,7 @@ class JpegMaintenanceWorker(QObject):
                 len(report.errors),
             )
             self.finished.emit(report)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             LOGGER.exception("JpegMaintenanceWorker failed")
             self.failed.emit(str(exc))
 
@@ -177,7 +184,7 @@ class JpegMaintenanceWorker(QObject):
 
 
 __all__ = [
-    "ScanWorker",
     "ApplyWorker",
     "JpegMaintenanceWorker",
+    "ScanWorker",
 ]

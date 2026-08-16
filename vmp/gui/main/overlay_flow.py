@@ -8,14 +8,14 @@ from PyQt6.QtWidgets import QDialog, QMessageBox
 
 from ...core.discovery import normalize_root
 from ...core.i18n import tr
-from ..lasso.dialog import LassoDialog
-from ..lasso.map_view import webengine_available
-from ..pairs.dialog import PairCleanupDialog
-from ..lasso.trip_selection import TripRecord
 from ...core.logging_config import get_logger
+from ...core.settings import save_settings
 from ...metadata import gps_coordinates
 from ...pair_cleanup import find_pairs
-from ...core.settings import save_settings
+from ..lasso.dialog import LassoDialog
+from ..lasso.map_view import webengine_available
+from ..lasso.trip_selection import TripRecord
+from ..pairs.dialog import PairCleanupDialog
 
 LOGGER = get_logger(__name__)
 

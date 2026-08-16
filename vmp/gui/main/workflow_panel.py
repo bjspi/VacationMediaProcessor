@@ -10,10 +10,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtWidgets import QHBoxLayout
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QPushButton, QSpinBox, QStyle, QWidget
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QHBoxLayout,
+    QPushButton,
+    QSpinBox,
+    QStyle,
+    QWidget,
+)
 
 from ...core.i18n import tr
+from ...core.models import ApplyMode
 from ..common.form_rows import (
     checkbox_pair_row,
     checkbox_with_info,
@@ -24,13 +32,12 @@ from ..common.form_rows import (
     stepper_triple_row,
     style_spinbox,
 )
-from ...core.models import ApplyMode
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .window import MainWindow
 
 
-def build_workflow_section(window: "MainWindow") -> QWidget:
+def build_workflow_section(window: MainWindow) -> QWidget:
     """Create the Workflow box, attach its controls to ``window``, return the box."""
     workflow_box, form = collapsible_section("Workflow")
     window.recursive_check = QCheckBox(tr("Unterordner einbeziehen"))

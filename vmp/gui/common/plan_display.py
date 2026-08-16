@@ -21,7 +21,7 @@ def human_size(size: float) -> str:
 
 
 
-def file_size_text(path: "Path") -> str:
+def file_size_text(path: Path) -> str:
     """Return a human-readable size for a file, or empty when unreadable."""
     try:
         return human_size(path.stat().st_size)

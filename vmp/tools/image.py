@@ -27,7 +27,7 @@ def _heic_display_dims(path: Path) -> tuple[int, int] | None:
         pillow_heif.register_heif_opener()
         with Image.open(str(path)) as im:
             return int(im.width), int(im.height)
-    except Exception:  # noqa: BLE001
+    except Exception:
         LOGGER.warning("Could not measure HEIC display size for orientation check: %s", path, exc_info=True)
         return None
 
@@ -40,7 +40,7 @@ def _jpeg_raster_dims(path: Path) -> tuple[int, int] | None:
 
         with Image.open(str(path)) as im:
             return int(im.width), int(im.height)
-    except Exception:  # noqa: BLE001
+    except Exception:
         LOGGER.warning("Could not measure JPEG raster size for orientation check: %s", path, exc_info=True)
         return None
 
@@ -198,7 +198,7 @@ def embed_gdepth(source: Path, target_jpg: Path, settings: AppSettings) -> bool:
 
     try:
         import pillow_heif
-    except Exception:  # pragma: no cover - dependency guaranteed at runtime
+    except Exception:  # noqa: BLE001  # pragma: no cover - optional decoder boundary
         LOGGER.warning("pillow-heif unavailable; cannot preserve depth for %s", source)
         return False
 

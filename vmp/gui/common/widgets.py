@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from PyQt6.QtCore import QObject, QPoint, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPixmap, QPolygon
-from PyQt6.QtWidgets import QHeaderView, QLabel, QPushButton, QSizePolicy, QTableWidget, QWidget
+from PyQt6.QtWidgets import (
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QTableWidget,
+    QWidget,
+)
 
 from ...core.i18n import tr
 
@@ -26,7 +35,7 @@ class MediaTableColumns:
         "codec",
         "size",
     )
-    LABELS: dict[str, str] = {
+    LABELS: ClassVar[dict[str, str]] = {
         "status": "Status",
         "type": "Typ",
         "file": "Datei",
@@ -40,7 +49,7 @@ class MediaTableColumns:
         "codec": "Codec",
         "size": "Größe",
     }
-    INDEX: dict[str, int] = {name: index for index, name in enumerate(ORDER)}
+    INDEX: ClassVar[dict[str, int]] = {name: index for index, name in enumerate(ORDER)}
 
     @classmethod
     def index(cls, name: str) -> int:
@@ -166,7 +175,7 @@ class AspectRatioPreview(QLabel):
             self.setText("")
             self._rescale()
 
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         if not self._source.isNull():
             self._rescale()
@@ -223,7 +232,7 @@ class FilterHeaderView(QHeaderView):
         self._active_columns = set(columns)
         self.viewport().update()
 
-    def paintSection(self, painter, rect, logicalIndex) -> None:  # noqa: N802
+    def paintSection(self, painter, rect, logicalIndex) -> None:
         super().paintSection(painter, rect, logicalIndex)
         active = logicalIndex in self._active_columns
         painter.save()
@@ -236,7 +245,7 @@ class FilterHeaderView(QHeaderView):
         painter.drawPolygon(triangle)
         painter.restore()
 
-    def sectionSizeFromContents(self, logicalIndex):  # noqa: N802
+    def sectionSizeFromContents(self, logicalIndex):
         """Reserve room on the right for the filter indicator."""
         size = super().sectionSizeFromContents(logicalIndex)
         size.setWidth(size.width() + self._INDICATOR_WIDTH)

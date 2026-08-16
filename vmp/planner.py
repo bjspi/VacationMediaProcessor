@@ -13,10 +13,9 @@ from .core.models import (
     AppSettings,
     MediaKind,
     MediaPlan,
-    PlanStatus,
     PlannedAction,
+    PlanStatus,
 )
-
 
 _HEIC_SUFFIXES = {".heic", ".heif"}
 _CONVERTIBLE_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", *_HEIC_SUFFIXES}

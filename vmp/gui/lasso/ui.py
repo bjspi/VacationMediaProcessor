@@ -28,9 +28,9 @@ from PyQt6.QtWidgets import (
 )
 
 from ...core.i18n import tr
+from ..common.theme import asset_path
 from .histogram import DayHistogramWidget
 from .map_view import MAP_HTML, MapBridge, qwebchannel_js
-from ..common.theme import asset_path
 from .thumb_strip import THUMB_MAX, THUMB_MIN, ThumbDelegate, ThumbStrip
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -38,7 +38,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 LOGGER = logging.getLogger("vmp.gui.lasso.ui")
 
-def build_lasso_ui(dialog: "LassoDialog") -> None:
+def build_lasso_ui(dialog: LassoDialog) -> None:
     layout = QVBoxLayout(dialog)
     layout.setContentsMargins(14, 14, 14, 14)
     layout.setSpacing(10)
@@ -150,7 +150,7 @@ def build_lasso_ui(dialog: "LassoDialog") -> None:
     # Footer: destination + actions
     layout.addWidget(_build_footer(dialog))
 
-def _build_map(dialog: "LassoDialog") -> QWidget:
+def _build_map(dialog: LassoDialog) -> QWidget:
     from PyQt6.QtWebChannel import QWebChannel
     from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
     from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -158,7 +158,7 @@ def _build_map(dialog: "LassoDialog") -> QWidget:
     class _LoggingPage(QWebEnginePage):
         """QWebEnginePage that forwards JS console output to our logger."""
 
-        def javaScriptConsoleMessage(self, level, message, line, source):  # noqa: N802
+        def javaScriptConsoleMessage(self, level, message, line, source):
             LOGGER.info("Lasso map JS [%s] %s:%s — %s", level, source, line, message)
 
     dialog.view = QWebEngineView()
@@ -190,10 +190,9 @@ def _build_map(dialog: "LassoDialog") -> QWidget:
     html = MAP_HTML.replace("__QWEBCHANNEL_JS__", qwc_js)
     # Write to a temp file and load via file:// so CDN scripts and the
     # inlined channel transport behave reliably.
-    tmp = tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8")
-    tmp.write(html)
-    tmp.close()
-    dialog._map_html_path = Path(tmp.name)
+    with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as tmp:
+        tmp.write(html)
+        dialog._map_html_path = Path(tmp.name)
 
     dialog.view.loadStarted.connect(lambda: LOGGER.info("Lasso map: load started"))
     dialog.view.loadProgress.connect(lambda pct: LOGGER.debug("Lasso map: load %s%%", pct))
@@ -204,7 +203,7 @@ def _build_map(dialog: "LassoDialog") -> QWidget:
     dialog.view.load(url)
     return dialog.view
 
-def _build_side_controls(dialog: "LassoDialog") -> QWidget:
+def _build_side_controls(dialog: LassoDialog) -> QWidget:
     panel = QFrame()
     panel.setFixedWidth(260)
     panel.setObjectName("lassoSide")
@@ -278,7 +277,7 @@ def _build_side_controls(dialog: "LassoDialog") -> QWidget:
     outer.addWidget(dialog._stack)
     return panel
 
-def _build_footer(dialog: "LassoDialog") -> QWidget:
+def _build_footer(dialog: LassoDialog) -> QWidget:
     footer = QFrame()
     layout = QHBoxLayout(footer)
     layout.setContentsMargins(0, 0, 0, 0)

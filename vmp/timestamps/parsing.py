@@ -34,7 +34,7 @@ FILENAME_DT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})[_-](\d{2})(\d{2})(\d{2})(?!\d)"),
     re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?!\d)"),
     re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})[_-](\d{2})-(\d{2})-(\d{2})(?!\d)"),
-    re.compile(r"(?:IMG|VID|PXL|WA)[-_]?(\d{4})(\d{2})(\d{2})[-_]?(\d{2})(\d{2})(\d{2})", re.I),
+    re.compile(r"(?:IMG|VID|PXL|WA)[-_]?(\d{4})(\d{2})(\d{2})[-_]?(\d{2})(\d{2})(\d{2})", re.IGNORECASE),
 )
 FILENAME_DATE_ONLY_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"IMG-(\d{4})(\d{2})(\d{2})-WA\d+", re.IGNORECASE),

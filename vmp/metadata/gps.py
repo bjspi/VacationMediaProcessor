@@ -7,7 +7,6 @@ from typing import Any
 
 from ..timestamps.parsing import get_first_str
 
-
 _GPS_DMS_RE = re.compile(
     r"(?P<deg>[-+]?\d+(?:\.\d+)?)\s*(?:deg|°)?"
     r"(?:\s*(?P<min>\d+(?:\.\d+)?)\s*')?"

@@ -13,8 +13,8 @@ import logging
 from pathlib import Path
 
 from ...core.discovery import normalize_root
-from .file_transfer import same_path
 from ...core.models import MediaPlan
+from .file_transfer import same_path
 
 LOGGER = logging.getLogger("vmp.gui.common.backup_discovery")
 

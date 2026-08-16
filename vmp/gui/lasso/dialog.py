@@ -20,7 +20,14 @@ from pathlib import Path
 
 from PyQt6.QtCore import QByteArray, QObject, QSize, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon, QImage, QPixmap
-from PyQt6.QtWidgets import QDialog, QFileDialog, QListWidgetItem, QMessageBox, QStyle, QWidget
+from PyQt6.QtWidgets import (
+    QDialog,
+    QFileDialog,
+    QListWidgetItem,
+    QMessageBox,
+    QStyle,
+    QWidget,
+)
 
 from ...core.i18n import tr
 from ..common.file_transfer import (
@@ -30,16 +37,15 @@ from ..common.file_transfer import (
     sanitize_folder_name,
     unique_target,
 )
-from .geocode import reverse_geocode_place
-from .ui import build_lasso_ui
-from .thumb_strip import THUMB_DEFAULT_SIZE, THUMB_MAX, THUMB_MIN, ThumbStrip
-from .transfer_worker import TransferWorker
-from .histogram import DayHistogramWidget
 from ..common.thumbnails import (
     ThumbnailService,
     ThumbRelay,
     thumb_cache_key,
 )
+from .geocode import reverse_geocode_place
+from .histogram import DayHistogramWidget
+from .thumb_strip import THUMB_DEFAULT_SIZE, THUMB_MAX, THUMB_MIN, ThumbStrip
+from .transfer_worker import TransferWorker
 from .trip_selection import (
     TripRecord,
     TripSelection,
@@ -49,6 +55,7 @@ from .trip_selection import (
     select_by_days,
     select_by_polygon,
 )
+from .ui import build_lasso_ui
 
 LOGGER = logging.getLogger("vmp.gui.lasso.dialog")
 
@@ -158,7 +165,7 @@ class LassoDialog(QDialog):
         if geometry:
             try:
                 self.restoreGeometry(QByteArray.fromBase64(geometry.encode("ascii")))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 LOGGER.debug("Could not restore lasso window geometry", exc_info=True)
 
     def _build_ui(self) -> None:
@@ -239,7 +246,7 @@ class LassoDialog(QDialog):
     def _run_javascript(self, code: str) -> None:
         try:
             self.view.page().runJavaScript(code)
-        except Exception:  # noqa: BLE001
+        except Exception:
             LOGGER.debug("runJavaScript failed: %s", code, exc_info=True)
 
     def _highlight_selection_on_map(self, selection: TripSelection) -> None:
@@ -542,7 +549,7 @@ class LassoDialog(QDialog):
     def _transfer_running(self) -> bool:
         return self._transfer_thread is not None and self._transfer_thread.isRunning()
 
-    def reject(self) -> None:  # noqa: D102 - Qt override (Esc / Abbrechen)
+    def reject(self) -> None:
         if self._transfer_running():
             return
         super().reject()
@@ -564,7 +571,7 @@ class LassoDialog(QDialog):
                 pass
             self._map_html_path = None
 
-    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def closeEvent(self, event) -> None:
         if self._transfer_running():
             QMessageBox.information(
                 self, tr("Reise-Lasso"), tr("Bitte warten, bis die laufende Übertragung abgeschlossen ist.")

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from ..core.models import MediaKind, RawMetadata
 from .parsing import (
@@ -129,7 +130,7 @@ def is_core_metadata_datetime_key(key: str) -> bool:
     if not is_datetime_like_key(key):
         return False
     lowered = key.lower()
-    return not (lowered.startswith("file:") or lowered.startswith("system:"))
+    return not lowered.startswith(("file:", "system:"))
 
 
 

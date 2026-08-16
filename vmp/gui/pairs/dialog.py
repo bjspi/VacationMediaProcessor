@@ -32,11 +32,11 @@ from PyQt6.QtWidgets import (
 )
 
 from ...core.i18n import tr
+from ...pair_cleanup import PairCandidate
 from ..common.file_transfer import unique_target
 from .row import PairRow
 from .viewer import PairViewer
 from .worker import PairWorker
-from ...pair_cleanup import PairCandidate
 
 LOGGER = logging.getLogger("vmp.gui.pairs.dialog")
 
@@ -82,7 +82,7 @@ class PairCleanupDialog(QDialog):
         if geometry:
             try:
                 self.restoreGeometry(QByteArray.fromBase64(geometry.encode("ascii")))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 LOGGER.debug("Could not restore pair window geometry", exc_info=True)
 
     # -- UI ---------------------------------------------------------------- #
@@ -265,5 +265,5 @@ class PairCleanupDialog(QDialog):
                 # keep waiting instead of giving up after one fixed timeout.
                 while self._thread.isRunning() and not self._thread.wait(2000):
                     LOGGER.warning("Waiting for pair worker thread to finish before closing dialog")
-        except Exception:  # noqa: BLE001
+        except Exception:
             LOGGER.debug("Pair dialog cleanup error", exc_info=True)

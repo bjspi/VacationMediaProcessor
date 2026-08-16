@@ -10,10 +10,10 @@ from PyQt6.QtGui import QColor, QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
 from ...core.i18n import tr
+from ...pair_cleanup import PairCandidate
 from ..common.file_transfer import open_in_default_app
 from ..common.plan_display import human_size
 from .worker import THUMB_SIZE
-from ...pair_cleanup import PairCandidate
 
 LOGGER = logging.getLogger("vmp.gui.pairs.row")
 
@@ -186,9 +186,14 @@ class PairRow(QFrame):
         if not meta:
             return None
         w, h = meta
-        if image is not None and not image.isNull() and image.width() > 0 and image.height() > 0:
-            if (h > w) != (image.height() > image.width()):
-                return h, w
+        if (
+            image is not None
+            and not image.isNull()
+            and image.width() > 0
+            and image.height() > 0
+            and (h > w) != (image.height() > image.width())
+        ):
+            return h, w
         return w, h
 
     def _render(self) -> None:

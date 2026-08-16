@@ -134,7 +134,7 @@ class MapBridge(QObject):
         self._points_json = points_json
 
     @pyqtSlot(result=str)
-    def get_points(self) -> str:  # noqa: D401 - Qt slot
+    def get_points(self) -> str:
         """Return the GPS points as a JSON string (pulled by JS on load)."""
         LOGGER.info("Lasso map: JS requested points (%s bytes)", len(self._points_json))
         return self._points_json

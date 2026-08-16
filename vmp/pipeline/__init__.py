@@ -10,10 +10,14 @@ the package's public API:
 
 from __future__ import annotations
 
-from .apply import (  # noqa: F401
+# Re-exported for tests exercising single-plan behaviour.
+from .apply import (  # noqa: F401  # noqa: F401
+    _apply_one_plan,
+    _record_outcome,
     apply_plans,
     maintain_jpegs,
 )
+from .scan import scan_and_plan, scan_items_and_plan  # noqa: F401
 from .shared import (  # noqa: F401
     ApplyItemCallback,
     CancelCallback,
@@ -30,7 +34,3 @@ from .shared import (  # noqa: F401
     raise_if_cancelled,
     work_dir,
 )
-from .scan import scan_and_plan, scan_items_and_plan  # noqa: F401
-
-# Re-exported for tests exercising single-plan behaviour.
-from .apply import _apply_one_plan, _record_outcome  # noqa: F401

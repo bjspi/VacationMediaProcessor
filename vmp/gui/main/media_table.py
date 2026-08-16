@@ -28,7 +28,16 @@ from PyQt6.QtWidgets import (
 )
 
 from ...core.i18n import tr
+from ...core.models import MediaPlan, PlanStatus
+from ...metadata import gps_coordinates, has_exif_datetime_values, has_gps
+from ...reports import plan_action_summary
 from ..common.form_rows import rich_tooltip
+from ..common.plan_display import (
+    codec_cell_text,
+    file_size_text,
+    human_size,
+    video_bucket_label_text,
+)
 from ..common.theme import asset_path
 from ..common.widgets import (
     COLUMN_CAP,
@@ -38,10 +47,6 @@ from ..common.widgets import (
     MediaTableWidget,
     distribute_column_widths,
 )
-from ..common.plan_display import codec_cell_text, file_size_text, human_size, video_bucket_label_text
-from ...metadata import gps_coordinates, has_exif_datetime_values, has_gps
-from ...core.models import MediaPlan, PlanStatus
-from ...reports import plan_action_summary
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .window import MainWindow
@@ -50,7 +55,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 class MediaTableController:
     """Owns the media table widget, its filters, fonts, and column fitting."""
 
-    def __init__(self, window: "MainWindow") -> None:
+    def __init__(self, window: MainWindow) -> None:
         self._win = window
         self._column_filters: dict[int, dict] = {}
         self._col_desired: dict[str, int] = {}
@@ -76,13 +81,13 @@ class MediaTableController:
         font = self.table.font()
         font.setPointSize(size)
         self.table.setStyleSheet(
-            "QTableWidget { font-size: %dpt; }"
-            "QTableWidget::item { font-size: %dpt; }" % (size, size)
+            f"QTableWidget {{ font-size: {size}pt; }}"
+            f"QTableWidget::item {{ font-size: {size}pt; }}"
         )
         self.table.setFont(font)
         self.table.horizontalHeader().setFont(font)
         self.table.verticalHeader().setFont(font)
-        self.table.horizontalHeader().setStyleSheet("QHeaderView::section { font-size: %dpt; }" % size)
+        self.table.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ font-size: {size}pt; }}")
         row_height = max(24, self.table.fontMetrics().height() + 10)
         self.table.verticalHeader().setDefaultSectionSize(row_height)
         for row in range(self.table.rowCount()):

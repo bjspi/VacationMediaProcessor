@@ -22,20 +22,20 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ...core.i18n import tr
+from ...core.logging_config import get_logger
+from ..common.widgets import AspectRatioPreview
 from .header import build_header
 from .media_table import MediaTableController
 from .preview_pane import PreviewController
-from ..common.widgets import AspectRatioPreview
 from .workflow_panel import build_workflow_section
-from ...core.i18n import tr
-from ...core.logging_config import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .window import MainWindow
 
 LOGGER = get_logger(__name__)
 
-def build_ui(window: "MainWindow") -> None:
+def build_ui(window: MainWindow) -> None:
     """Build widgets and layout."""
     open_action = QAction(tr("Ordner öffnen"), window)
     open_action.setIcon(window.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
@@ -124,7 +124,7 @@ def build_ui(window: "MainWindow") -> None:
     window.setCentralWidget(root_widget)
     build_status_bar(window)
 
-def build_status_bar(window: "MainWindow") -> None:
+def build_status_bar(window: MainWindow) -> None:
     """Build the bottom status bar with media counts and sizes."""
     window.stats_label = QLabel(tr("Bereit"))
     window.stats_label.setObjectName("statusLabel")
@@ -132,7 +132,7 @@ def build_status_bar(window: "MainWindow") -> None:
     bar.addWidget(window.stats_label, 1)
     window.setStatusBar(bar)
 
-def build_table_panel(window: "MainWindow") -> QWidget:
+def build_table_panel(window: MainWindow) -> QWidget:
     """Build the media table panel around the table controller's widget."""
     panel = QFrame()
     panel.setObjectName("tablePanel")
@@ -149,7 +149,7 @@ def build_table_panel(window: "MainWindow") -> QWidget:
     layout.addWidget(window.table)
     return panel
 
-def build_side_panel(window: "MainWindow") -> QWidget:
+def build_side_panel(window: MainWindow) -> QWidget:
     """Build the settings and preview side panel."""
     panel = QScrollArea()
     panel.setWidgetResizable(True)
@@ -178,7 +178,7 @@ def build_side_panel(window: "MainWindow") -> QWidget:
     window._fit_side_panel()
     return panel
 
-def build_log_dock(window: "MainWindow") -> QDockWidget:
+def build_log_dock(window: MainWindow) -> QDockWidget:
     """Build the collapsible dock widget for live log output."""
     dock = QDockWidget("Log", window)
     dock.setObjectName("logDock")

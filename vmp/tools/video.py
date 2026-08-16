@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
-from typing import Callable
 
 from ..core.logging_config import get_logger
 from ..core.models import AppSettings
@@ -227,8 +227,7 @@ def transcode_video(
 
     def _drain_stderr() -> None:
         assert proc.stderr is not None
-        for line in proc.stderr:
-            stderr_chunks.append(line)
+        stderr_chunks.extend(proc.stderr)
 
     try:
         proc = subprocess.Popen(

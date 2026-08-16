@@ -13,7 +13,7 @@ THUMB_MAX = 240
 class ThumbDelegate(QStyledItemDelegate):
     """Render deselected (unchecked) thumbnails with reduced opacity."""
 
-    def paint(self, painter, option, index) -> None:  # noqa: N802 - Qt override
+    def paint(self, painter, option, index) -> None:
         state = index.data(Qt.ItemDataRole.CheckStateRole)
         checked = state == Qt.CheckState.Checked or (isinstance(state, int) and state == 2)
         if checked:
@@ -43,7 +43,7 @@ class ThumbStrip(QListWidget):
     def _checkable(item: QListWidgetItem | None) -> bool:
         return item is not None and bool(item.flags() & Qt.ItemFlag.ItemIsUserCheckable)
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             item = self.itemAt(event.position().toPoint())
             if self._checkable(item):
@@ -59,7 +59,7 @@ class ThumbStrip(QListWidget):
                 return
         super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mouseMoveEvent(self, event) -> None:
         if self._paint_state is not None and (event.buttons() & Qt.MouseButton.LeftButton):
             item = self.itemAt(event.position().toPoint())
             if self._checkable(item) and id(item) not in self._painted:
@@ -69,7 +69,7 @@ class ThumbStrip(QListWidget):
             return
         super().mouseMoveEvent(event)
 
-    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt override
+    def mouseReleaseEvent(self, event) -> None:
         if self._paint_state is not None and event.button() == Qt.MouseButton.LeftButton:
             self._paint_state = None
             self._painted = set()

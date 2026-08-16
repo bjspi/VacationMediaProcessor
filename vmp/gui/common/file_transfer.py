@@ -89,7 +89,7 @@ def same_path(left: Path | None, right: Path | None) -> bool:
         return str(left).casefold() == str(right).casefold()
 
 
-def remaining_records(records: "list[TripRecord]", removed: list[Path]) -> "list[TripRecord]":
+def remaining_records(records: list[TripRecord], removed: list[Path]) -> list[TripRecord]:
     """Return records excluding removed paths."""
     removed_keys = {path_key(path) for path in removed}
     return [record for record in records if path_key(record.path) not in removed_keys]
@@ -104,5 +104,5 @@ def open_in_default_app(path: Path) -> None:
             subprocess.Popen(["open", str(path)])
         else:
             subprocess.Popen(["xdg-open", str(path)])
-    except Exception:  # noqa: BLE001
+    except Exception:
         LOGGER.warning("Could not open %s in default app", path, exc_info=True)

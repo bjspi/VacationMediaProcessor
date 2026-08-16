@@ -22,6 +22,7 @@ from ..core.models import (
     MetadataSettings,
     PlanStatus,
     RawMetadata,
+    ResolvedTimestamp,  # noqa: F401  (re-export convenience)
 )
 from ..core.processes import run_process
 
@@ -82,7 +83,6 @@ from ..timestamps.resolution import (  # noqa: F401
     resolve_timestamp,
     seconds_between,
 )
-from ..core.models import ResolvedTimestamp  # noqa: F401  (re-export convenience)
 from .gps import gps_coordinates, has_gps  # noqa: F401  (re-exported)
 from .writing import (  # noqa: F401  (re-exported)
     GROUP_CLEANUP_TAGS,

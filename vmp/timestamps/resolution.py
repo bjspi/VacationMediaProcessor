@@ -6,9 +6,10 @@ names are re-exported here for convenient single-module imports.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from ..core.i18n import tr
 from ..core.models import (
@@ -50,7 +51,6 @@ from .parsing import (
     parse_gps_datetime,
     parse_iso_datetime,
 )
-
 
 
 def seconds_between(left: datetime, right: datetime) -> int:
@@ -167,13 +167,14 @@ def infer_from_all_datetime_values(
     local_dt, utc_dt, offset_td = best_triplet
     local_sources = tuple(sorted(value_sources.get(local_dt, set())))
     utc_sources = tuple(sorted(value_sources.get(utc_dt, set())))
-    return local_dt, utc_dt, offset_td, local_sources, utc_sources, tuple(sorted(set((*local_sources, *utc_sources))))
+    all_sources = tuple(sorted({*local_sources, *utc_sources}))
+    return local_dt, utc_dt, offset_td, local_sources, utc_sources, all_sources
 
 
 def maybe_derive_offset(local_dt: datetime, utc_dt: datetime, tolerance_seconds: int) -> timedelta | None:
     """Derive a plausible offset from local and UTC datetimes."""
     raw_offset = local_dt - utc_dt
-    rounded_minutes = int(round(raw_offset.total_seconds() / 60.0))
+    rounded_minutes = round(raw_offset.total_seconds() / 60.0)
     rounded_offset = timedelta(minutes=rounded_minutes)
     drift_seconds = abs(int((raw_offset - rounded_offset).total_seconds()))
     if drift_seconds > tolerance_seconds:

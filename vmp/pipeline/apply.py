@@ -10,18 +10,11 @@ from threading import Lock
 
 from ..core.discovery import discover_media, normalize_root
 from ..core.i18n import tr
-from ..tools import (
-    convert_image,
-    copy_all_metadata,
-    embed_gdepth,
-    maintain_jpeg,
-    probe_video,
-    transcode_video,
-    write_metadata,
+from ..core.logging_config import (
+    add_run_file_handler,
+    get_logger,
+    remove_run_file_handler,
 )
-from ..core.logging_config import add_run_file_handler, get_logger, remove_run_file_handler
-from ..manifest import write_before_after_manifests, write_manifest
-from ..metadata import read_metadata_batch
 from ..core.models import (
     ActionKind,
     ApplyItemUpdate,
@@ -32,6 +25,23 @@ from ..core.models import (
     Phase,
     PipelineReport,
     PlanStatus,
+)
+from ..manifest import write_before_after_manifests, write_manifest
+from ..metadata import read_metadata_batch
+from ..planner import (
+    crf_for_video,
+    effective_video_bucket,
+    video_downscale_target,
+    video_fps_limit,
+)
+from ..tools import (
+    convert_image,
+    copy_all_metadata,
+    embed_gdepth,
+    maintain_jpeg,
+    probe_video,
+    transcode_video,
+    write_metadata,
 )
 from .shared import (
     ApplyItemCallback,
@@ -48,7 +58,6 @@ from .shared import (
     raise_if_cancelled,
     work_dir,
 )
-from ..planner import crf_for_video, effective_video_bucket, video_downscale_target, video_fps_limit
 
 LOGGER = get_logger(__name__)
 
@@ -258,14 +267,13 @@ def _apply_one_plan(
             outcome.current_size = final_path.stat().st_size
         except OSError:
             outcome.current_size = None
-        if source in (video_durations or {}):
-            if video_state is not None:
-                video_state["completed"] += (video_durations or {})[source]
-                LOGGER.info(
-                    "Video cumulative progress: %.1fs / %.1fs",
-                    video_state["completed"],
-                    total_video_seconds,
-                )
+        if source in (video_durations or {}) and video_state is not None:
+            video_state["completed"] += (video_durations or {})[source]
+            LOGGER.info(
+                "Video cumulative progress: %.1fs / %.1fs",
+                video_state["completed"],
+                total_video_seconds,
+            )
         LOGGER.info("Apply item completed: %s", source)
         return outcome
     except VideoNotSmallerError as exc:
@@ -275,7 +283,7 @@ def _apply_one_plan(
         outcome.warnings.append(f"{source}: {exc}")
         outcome.skipped = True
         return outcome
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         LOGGER.exception("Apply item failed: %s", source)
         outcome.errors.append(f"{source}: {exc}")
         outcome.skipped = True
@@ -375,13 +383,12 @@ def apply_plans(
                         ): plan
                         for index, plan in enumerate(image_plans, start=1)
                     }
-                    completed = 0
-                    for future in as_completed(futures):
+                    for completed, future in enumerate(as_completed(futures), start=1):
                         raise_if_cancelled(cancel_callback)
                         plan = futures[future]
                         try:
                             outcome = future.result()
-                        except Exception as exc:  # noqa: BLE001
+                        except Exception as exc:
                             LOGGER.exception("Image apply future crashed: %s", plan.analysis.item.path)
                             outcome = _ApplyOutcome(
                                 plan=plan,
@@ -391,7 +398,6 @@ def apply_plans(
                             )
                         _record_outcome(report, outcome)
                         _emit_item_update(item_callback, run_id, outcome)
-                        completed += 1
                         emit(
                             callback,
                             Phase.IMAGE_CONVERSION,
@@ -481,13 +487,13 @@ def apply_plans(
                         report=report,
                         after_metadata=after_records,
                     )
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     warning = f"Post-apply EXIF readback/before-after manifests failed: {exc}"
                     LOGGER.exception(warning)
                     report.warnings.append(warning)
                     try:
                         write_manifest(manifest_path, root=normalized_root, settings=settings, plans=plans, report=report)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         LOGGER.exception("Could not update run manifest after post-apply readback failure.")
             LOGGER.info(
                 "Apply completed run_id=%s changed=%s skipped=%s errors=%s",
@@ -553,7 +559,7 @@ def maintain_jpegs(
             emit(callback, Phase.JPEG_MAINTENANCE, index, total, f"Fixed JPEG: {source.name}")
         except PipelineCancelled:
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             LOGGER.exception("JPEG maintenance item failed: %s", source)
             report.errors.append(f"{source}: {exc}")
             report.skipped += 1
