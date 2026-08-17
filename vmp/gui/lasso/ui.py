@@ -28,6 +28,8 @@ from PyQt6.QtWidgets import (
 )
 
 from ...core.i18n import tr
+from ...map_providers import leaflet_provider_script
+from ..common.map_provider import MapProviderCombo, apply_map_provider, configure_local_map_settings
 from ..common.theme import asset_path
 from .histogram import DayHistogramWidget
 from .map_view import MAP_HTML, MapBridge, qwebchannel_js
@@ -152,7 +154,7 @@ def build_lasso_ui(dialog: LassoDialog) -> None:
 
 def _build_map(dialog: LassoDialog) -> QWidget:
     from PyQt6.QtWebChannel import QWebChannel
-    from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+    from PyQt6.QtWebEngineCore import QWebEnginePage
     from PyQt6.QtWebEngineWidgets import QWebEngineView
 
     class _LoggingPage(QWebEnginePage):
@@ -166,12 +168,8 @@ def _build_map(dialog: LassoDialog) -> QWidget:
     page = _LoggingPage(dialog.view)
     dialog.view.setPage(page)
 
-    # A file:// page must be allowed to pull the Leaflet CDN scripts and the
-    # OSM map tiles, otherwise the map silently stays blank.
-    settings = dialog.view.settings()
-    settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
-    settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
-    settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+    # A file:// page must be allowed to pull the Leaflet CDN scripts and tiles.
+    configure_local_map_settings(dialog.view.settings())
 
     points = [
         {"id": str(r.path), "lat": r.lat, "lon": r.lon}
@@ -187,7 +185,9 @@ def _build_map(dialog: LassoDialog) -> QWidget:
 
     qwc_js = qwebchannel_js()
     LOGGER.info("Lasso map: qwebchannel.js length=%s", len(qwc_js))
-    html = MAP_HTML.replace("__QWEBCHANNEL_JS__", qwc_js)
+    html = MAP_HTML.replace("__QWEBCHANNEL_JS__", qwc_js).replace(
+        "__MAP_PROVIDER_JS__", leaflet_provider_script(dialog._map_settings)
+    )
     # Write to a temp file and load via file:// so CDN scripts and the
     # inlined channel transport behave reliably.
     with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as tmp:
@@ -201,7 +201,23 @@ def _build_map(dialog: LassoDialog) -> QWidget:
     url = QUrl.fromLocalFile(str(dialog._map_html_path))
     LOGGER.info("Lasso map: loading %s", url.toString())
     dialog.view.load(url)
-    return dialog.view
+
+    host = QWidget()
+    host_layout = QVBoxLayout(host)
+    host_layout.setContentsMargins(0, 0, 0, 0)
+    host_layout.setSpacing(5)
+    provider_row = QHBoxLayout()
+    provider_row.addWidget(QLabel(tr("Kartenanbieter:")))
+    dialog.map_provider_combo = MapProviderCombo(
+        dialog._map_settings,
+        changed=lambda: apply_map_provider(dialog.view, dialog._map_settings),
+    )
+    dialog.map_provider_combo.setEnabled(False)
+    provider_row.addWidget(dialog.map_provider_combo)
+    provider_row.addStretch(1)
+    host_layout.addLayout(provider_row)
+    host_layout.addWidget(dialog.view, 1)
+    return host
 
 def _build_side_controls(dialog: LassoDialog) -> QWidget:
     panel = QFrame()

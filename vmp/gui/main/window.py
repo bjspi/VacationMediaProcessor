@@ -261,6 +261,7 @@ class MainWindow(
         if not self.results:
             self._update_missing_exif_badge()
             self._update_pairs_badge()
+            self._update_missing_gps_badge()
             return
         selected_row = self.table.currentRow()
         new_plans = build_plans(self.results, self.settings_model)
@@ -282,6 +283,7 @@ class MainWindow(
         self.missing_button.setEnabled(bool(actionable_plans))
         self._update_missing_exif_badge()
         self._update_pairs_badge()
+        self._update_missing_gps_badge()
 
     def _reanalyze_results_for_current_settings(self) -> None:
         """Re-evaluate timestamp resolution after live analysis-setting changes."""

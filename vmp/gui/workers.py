@@ -16,7 +16,9 @@ from ..core.models import (
     MediaPlan,
     PipelineProgress,
 )
+from ..gps_repair import GpsAssignment
 from ..pipeline import apply_plans, maintain_jpegs, scan_and_plan, scan_items_and_plan
+from ..pipeline.gps_repair import apply_gps_assignments
 
 LOGGER = get_logger(__name__)
 
@@ -183,8 +185,54 @@ class JpegMaintenanceWorker(QObject):
         return thread is not None and thread.isInterruptionRequested()
 
 
+class GpsRepairWorker(QObject):
+    """Write confirmed GPS assignments in the shared worker slot."""
+
+    progress = pyqtSignal(object)
+    finished = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(
+        self,
+        assignments: list[GpsAssignment],
+        settings: AppSettings,
+        create_backups: bool,
+    ) -> None:
+        super().__init__()
+        self._assignments = assignments
+        self._settings = settings
+        self._create_backups = create_backups
+
+    @pyqtSlot()
+    def run(self) -> None:
+        try:
+            LOGGER.info("GpsRepairWorker started with %s assignment(s)", len(self._assignments))
+            report = apply_gps_assignments(
+                self._assignments,
+                self._settings,
+                create_backups=self._create_backups,
+                progress_callback=self.progress.emit,
+                cancel_callback=self._cancel_requested,
+            )
+            LOGGER.info(
+                "GpsRepairWorker finished run_id=%s changed=%s failed=%s",
+                report.run_id,
+                report.changed,
+                report.failed,
+            )
+            self.finished.emit(report)
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.exception("GpsRepairWorker failed")
+            self.failed.emit(str(exc))
+
+    def _cancel_requested(self) -> bool:
+        thread = self.thread()
+        return thread is not None and thread.isInterruptionRequested()
+
+
 __all__ = [
     "ApplyWorker",
+    "GpsRepairWorker",
     "JpegMaintenanceWorker",
     "ScanWorker",
 ]

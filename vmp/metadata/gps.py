@@ -15,6 +15,34 @@ _GPS_DMS_RE = re.compile(
     re.IGNORECASE,
 )
 
+_ISO6709_RE = re.compile(
+    r"^\s*(?P<lat>[+-]\d{2}(?:\.\d+)?)"
+    r"(?P<lon>[+-]\d{3}(?:\.\d+)?)"
+    r"(?:[+-]\d+(?:\.\d+)?)?/?\s*$"
+)
+
+
+def _parse_position(value: str | None) -> tuple[float, float] | None:
+    """Parse a combined decimal/ISO-6709 latitude-longitude value."""
+    if value is None:
+        return None
+    match = _ISO6709_RE.match(value)
+    if match is not None:
+        return (float(match.group("lat")), float(match.group("lon")))
+    if "," in value:
+        left, right = value.split(",", 1)
+        latitude = _parse_coordinate(left)
+        longitude = _parse_coordinate(right)
+        if latitude is not None and longitude is not None:
+            return (latitude, longitude)
+    parts = [part for part in re.split(r"\s*,\s*|\s+", value.strip()) if part]
+    if len(parts) >= 2:
+        latitude = _parse_coordinate(parts[0])
+        longitude = _parse_coordinate(parts[1])
+        if latitude is not None and longitude is not None:
+            return (latitude, longitude)
+    return None
+
 
 
 def _parse_coordinate(value: str | None) -> float | None:
@@ -47,14 +75,36 @@ def gps_coordinates(tags: dict[str, Any]) -> tuple[float, float] | None:
     Handles both the formatted DMS strings ExifTool emits by default and plain
     decimal values, drawing from the GPS, Composite, and XMP groups.
     """
-    lat_raw = get_first_str(tags, "GPS:GPSLatitude", "Composite:GPSLatitude", "XMP:GPSLatitude")
-    lon_raw = get_first_str(tags, "GPS:GPSLongitude", "Composite:GPSLongitude", "XMP:GPSLongitude")
+    lat_raw = get_first_str(
+        tags,
+        "GPS:GPSLatitude",
+        "Composite:GPSLatitude",
+        "XMP:GPSLatitude",
+        "XMP-exif:GPSLatitude",
+    )
+    lon_raw = get_first_str(
+        tags,
+        "GPS:GPSLongitude",
+        "Composite:GPSLongitude",
+        "XMP:GPSLongitude",
+        "XMP-exif:GPSLongitude",
+    )
     if lat_raw is None or lon_raw is None:
         position = get_first_str(tags, "Composite:GPSPosition")
-        if position and "," in position:
-            lat_part, lon_part = position.split(",", 1)
-            lat_raw = lat_raw or lat_part
-            lon_raw = lon_raw or lon_part
+        combined = _parse_position(position)
+        if combined is None:
+            combined = _parse_position(
+                get_first_str(
+                    tags,
+                    "Keys:GPSCoordinates",
+                    "UserData:GPSCoordinates",
+                    "ItemList:GPSCoordinates",
+                    "QuickTime:GPSCoordinates",
+                )
+            )
+        if combined is not None:
+            lat_raw = lat_raw or str(combined[0])
+            lon_raw = lon_raw or str(combined[1])
     if lat_raw is None or lon_raw is None:
         return None
     lat_ref = get_first_str(tags, "GPS:GPSLatitudeRef", "Composite:GPSLatitudeRef")

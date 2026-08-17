@@ -60,6 +60,11 @@ Open the **Trip Lasso**: draw a polygon on a **map** (photos plotted by GPS), an
 
 → **[See the Trip Lasso in action ↓](#trip-lasso)**
 
+### 📍 "Some photos and videos have no location"
+The **Missing GPS** toolbar button carries a live count badge and opens one compact review window. VMP uses reliable capture times and surrounding geotagged media to propose positions, distinguishes safe suggestions from cases that need review, and recognizes stationary photo clusters instead of blindly drawing a straight trip through them. Nothing is pre-selected: choose the safe set in one click, adjust any item with a draggable map pin, or assign one manual position to several selected files. OpenStreetMap, OpenTopoMap, Mapy.com, and Mapy.com aerial imagery (with your own API key) are configured centrally and can be switched directly in every map tool.
+
+Only latitude and longitude are added; existing valid GPS positions are never overwritten. Writes are verified through ExifTool, can be backed up per batch, and produce a JSON audit manifest. If the online map is unavailable, the local automatic suggestions remain usable.
+
 ### 👯 "Burst mode and iPhone edits dumped duplicate pairs on me"
 Yo — do you also get **HEIC files with the same capture time** (hello, burst mode) or those weird `IMG_Exxxx` **edited/cropped copies** the iPhone transfers next to every `IMG_xxxx` (a 9:16 crop you never asked for)… and just want to declutter your albums *fast*? Open the **Pair Cleanup** tool (toolbar button with a live **count badge**):
 
@@ -177,6 +182,7 @@ _Click any image to open it full size._
 - ♻️ **Safe to re-run** — already-processed files are marked `DONE` and never re-converted or re-transcoded on the next scan.
 - 🗺️ **Trip Lasso** — carve trips out of one huge folder via map polygon + date histogram, then move/copy them into subfolders.
 - 👯 **Pair Cleanup** — finds iPhone/burst `IMG_/IMG_E` duplicates by capture time, pixel‑verifies crops as contained in the original, and clears the redundant copy to a backup folder.
+- 📍 **Missing GPS repair** — proposes locations from nearby timed GPS anchors and stationary clusters, with batch review and precise manual pin placement.
 - 🔍 **Dry-run first, backups always** — inspect the full plan with previews before anything changes.
 - 🌐 **German & English UI** — system-detected, switchable in Settings, extensible via JSON language files.
 

@@ -180,6 +180,7 @@ class MediaTableController:
         window._update_stats()
         window._update_missing_exif_badge()
         window._update_pairs_badge()
+        window._update_missing_gps_badge()
 
     def refresh_row(self, row: int) -> None:
         """Refresh visible cells for one plan row."""

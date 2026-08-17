@@ -190,8 +190,10 @@ class ScanFlowMixin:
         self.export_button.setEnabled(False)
         self.missing_button.setEnabled(False)
         self.lasso_button.setEnabled(False)
+        self.gps_repair_button.setEnabled(False)
         self._update_missing_exif_badge()
         self._update_pairs_badge()
+        self._update_missing_gps_badge()
         self.jpeg_fix_button.setEnabled(True)
         self.status_label.setText(tr("Ordner geöffnet. Dateiliste wird aufgebaut..."))
         LOGGER.info("Reset for new root %s", normalized)
@@ -342,6 +344,7 @@ class ScanFlowMixin:
             # current QThread finishing and the next queued scan starting.
             self._update_missing_exif_badge()
             self._update_pairs_badge()
+            self._update_missing_gps_badge()
             self.status_label.setText(
                 tr("Ordnerscan abgeschlossen. Noch {count} Ordner in der Warteschlange.").format(
                     count=len(self._pending_folders)
@@ -357,8 +360,10 @@ class ScanFlowMixin:
         self.export_button.setEnabled(bool(actionable_plans))
         self.missing_button.setEnabled(bool(actionable_plans))
         self.lasso_button.setEnabled(bool(self.results))
+        self.gps_repair_button.setEnabled(bool(self.results))
         self._update_missing_exif_badge()
         self._update_pairs_badge()
+        self._update_missing_gps_badge()
         self.status_label.setText(tr("Plan bereit: {count} Dateien.").format(count=len(self.results)))
         span_warning = vacation_span_warning(
             [plan.analysis for plan in all_plans],

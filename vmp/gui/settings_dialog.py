@@ -29,6 +29,8 @@ from ..core.logging_config import get_logger
 from ..core.models import AppSettings
 from ..core.processes import command_template_error, launch_gui_tool, resolve_executable
 from ..core.settings import save_settings
+from ..map_providers import provider_configuration_error, provider_requires_api_key
+from .common.map_provider import MapProviderCombo
 
 LOGGER = get_logger(__name__)
 
@@ -231,6 +233,34 @@ class SettingsDialog(QDialog):
         surface_layout.addStretch(1)
         tabs.addTab(surface_tab, "Misc")
 
+        # --- Shared map provider ---
+        maps_tab = QWidget()
+        maps_layout = QVBoxLayout(maps_tab)
+        maps_layout.setContentsMargins(0, 0, 0, 0)
+        maps_layout.setSpacing(12)
+        maps_box, maps_form = self._section(tr("Karten"))
+        maps_hint = QLabel(
+            tr("Diese Kartenquelle wird zentral im Reise-Lasso und in allen GPS-Werkzeugen verwendet.")
+        )
+        maps_hint.setObjectName("sectionHint")
+        maps_hint.setWordWrap(True)
+        maps_form.addRow("", maps_hint)
+        self.map_provider_combo = MapProviderCombo(
+            self._settings.maps,
+            allow_unconfigured=True,
+            commit_on_change=False,
+        )
+        self.mapy_api_key_edit = QLineEdit(self._settings.maps.mapy_api_key)
+        self.mapy_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.mapy_api_key_edit.setPlaceholderText(tr("API-Key von developer.mapy.com"))
+        self.map_provider_combo.currentIndexChanged.connect(self._update_mapy_key_state)
+        maps_form.addRow(tr("Kartenanbieter"), self.map_provider_combo)
+        maps_form.addRow(tr("Mapy.com API-Key"), self.mapy_api_key_edit)
+        maps_layout.addWidget(maps_box)
+        maps_layout.addStretch(1)
+        tabs.addTab(maps_tab, tr("Karten"))
+        self._update_mapy_key_state()
+
         # --- Buttons ---
         btn_layout = QHBoxLayout()
         btn_layout.addStretch(1)
@@ -404,6 +434,11 @@ class SettingsDialog(QDialog):
 
     # ── Actions ───────────────────────────────────────────────────────
 
+    def _update_mapy_key_state(self) -> None:
+        """Enable the API-key field only when the Mapy provider is selected."""
+        enabled = provider_requires_api_key(self.map_provider_combo.selected_provider())
+        self.mapy_api_key_edit.setEnabled(enabled)
+
     def _browse(self, edit: QLineEdit, display_name: str) -> None:
         """Open a file picker for a tool executable."""
         LOGGER.info("Choosing tool path title=%s current=%s", display_name, edit.text())
@@ -457,6 +492,15 @@ class SettingsDialog(QDialog):
 
     def _on_save(self) -> None:
         """Persist tool paths and close."""
+        map_provider = self.map_provider_combo.selected_provider()
+        mapy_api_key = self.mapy_api_key_edit.text().strip()
+        if provider_configuration_error(map_provider, mapy_api_key):
+            QMessageBox.warning(
+                self,
+                tr("Mapy.com API-Key fehlt"),
+                tr("Bitte einen Mapy.com API-Key eintragen oder einen anderen Kartenanbieter wählen."),
+            )
+            return
         diff_templates = (
             (tr("Bilder-Difftool"), self.image_diff_edit.text().strip()),
             (tr("Video-Difftool"), self.video_diff_edit.text().strip()),
@@ -496,6 +540,8 @@ class SettingsDialog(QDialog):
         self._settings.pair_check_workers = self.pair_workers_spin.value()
         self._settings.exiftool_read_batch_size = self.exiftool_batch_size_spin.value()
         self._settings.exiftool_parallel_batches = self.exiftool_parallel_batches_spin.value()
+        self._settings.maps.provider = map_provider
+        self._settings.maps.mapy_api_key = mapy_api_key
         save_settings(self._settings)
         LOGGER.info("Settings saved from dialog")
         self.accept()

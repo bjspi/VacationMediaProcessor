@@ -144,6 +144,13 @@ def build_header(window: MainWindow) -> QWidget:
     window.pairs_button.setToolTip(tr("Doppelte iPhone-Paare (IMG / IMG_E) aufräumen"))
     window.pairs_button.clicked.connect(window.open_pair_cleanup)
     window.pairs_button.setEnabled(False)
+    window.gps_repair_button = BadgeHeaderButton("0", window)
+    window.gps_repair_button.setAccessibleName("Missing GPS")
+    window.gps_repair_button.setObjectName("ghostButton")
+    window.gps_repair_button.setIcon(window._asset_icon("gps_missing.svg"))
+    window.gps_repair_button.setToolTip(tr("Fehlende GPS-Positionen automatisch oder per Karte ergänzen"))
+    window.gps_repair_button.clicked.connect(window.open_gps_repair)
+    window.gps_repair_button.setEnabled(False)
 
     for button in (
         open_button,
@@ -158,6 +165,7 @@ def build_header(window: MainWindow) -> QWidget:
         window.explorer_button,
         window.lasso_button,
         window.pairs_button,
+        window.gps_repair_button,
     ):
         _style_header_button(button)
 
@@ -175,6 +183,7 @@ def build_header(window: MainWindow) -> QWidget:
     action_row.addWidget(window.explorer_button)
     action_row.addWidget(window.lasso_button)
     action_row.addWidget(window.pairs_button)
+    action_row.addWidget(window.gps_repair_button)
     action_row.addStretch(1)
     header_layout.addLayout(brand_row)
     header_layout.addLayout(action_row)

@@ -14,7 +14,9 @@ from .models import (
     ApplyMode,
     AppSettings,
     DiffToolSettings,
+    GpsRepairSettings,
     ImageSettings,
+    MapSettings,
     MetadataSettings,
     ToolPaths,
     VideoSettings,
@@ -79,6 +81,17 @@ def _safe_int(value: Any, default: int) -> int:
         return default
 
 
+def _safe_float(value: Any, default: float) -> float:
+    """Return a finite float setting or a default."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number != number or number in {float("inf"), float("-inf")}:
+        return default
+    return number
+
+
 def _optional_int(value: Any) -> int | None:
     """Return an optional integer setting."""
     if value is None:
@@ -112,6 +125,11 @@ def _language(value: Any) -> str:
 def _clamped_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     """Return an integer setting clamped into a safe range."""
     return max(minimum, min(maximum, _safe_int(value, default)))
+
+
+def _clamped_float(value: Any, default: float, minimum: float, maximum: float) -> float:
+    """Return a floating-point setting clamped into a safe range."""
+    return max(minimum, min(maximum, _safe_float(value, default)))
 
 
 def _read_settings_payload() -> dict[str, Any]:
@@ -153,6 +171,36 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
     images.parallel_workers = _clamped_int(images.parallel_workers, 8, 1, 16)
     videos = _dataclass_from_dict(VideoSettings, payload.get("videos", {}))
     metadata = _dataclass_from_dict(MetadataSettings, payload.get("metadata", {}))
+    gps_payload = payload.get("gps_repair", {})
+    gps_repair = _dataclass_from_dict(GpsRepairSettings, gps_payload if isinstance(gps_payload, dict) else {})
+    gps_repair.single_safe_minutes = _clamped_int(gps_repair.single_safe_minutes, 2, 1, 120)
+    gps_repair.pair_safe_minutes = _clamped_int(gps_repair.pair_safe_minutes, 30, 1, 1440)
+    gps_repair.pair_safe_distance_km = _clamped_float(gps_repair.pair_safe_distance_km, 5.0, 0.1, 500.0)
+    gps_repair.pair_safe_speed_kmh = _clamped_float(gps_repair.pair_safe_speed_kmh, 20.0, 1.0, 300.0)
+    gps_repair.cluster_min_anchors = _clamped_int(gps_repair.cluster_min_anchors, 3, 3, 20)
+    gps_repair.cluster_min_span_minutes = _clamped_int(gps_repair.cluster_min_span_minutes, 5, 1, 1440)
+    gps_repair.cluster_radius_m = _clamped_int(gps_repair.cluster_radius_m, 200, 10, 5000)
+    gps_repair.cluster_max_gap_minutes = _clamped_int(gps_repair.cluster_max_gap_minutes, 60, 1, 1440)
+    gps_repair.review_pair_max_hours = _clamped_int(gps_repair.review_pair_max_hours, 4, 1, 48)
+    gps_repair.review_pair_max_distance_km = _clamped_float(
+        gps_repair.review_pair_max_distance_km, 50.0, 1.0, 2000.0
+    )
+    gps_repair.review_single_max_minutes = _clamped_int(gps_repair.review_single_max_minutes, 30, 1, 1440)
+    gps_repair.review_single_max_minutes = max(
+        gps_repair.review_single_max_minutes, gps_repair.single_safe_minutes
+    )
+    gps_repair.review_pair_max_distance_km = max(
+        gps_repair.review_pair_max_distance_km, gps_repair.pair_safe_distance_km
+    )
+    gps_repair.review_pair_max_hours = max(
+        gps_repair.review_pair_max_hours, (gps_repair.pair_safe_minutes + 59) // 60
+    )
+    maps_payload = payload.get("maps", {})
+    maps = _dataclass_from_dict(MapSettings, maps_payload if isinstance(maps_payload, dict) else {})
+    from ..map_providers import normalize_provider_id
+
+    maps.provider = normalize_provider_id(maps.provider)
+    maps.mapy_api_key = str(maps.mapy_api_key or "").strip()
     return AppSettings(
         recursive=bool(payload.get("recursive", True)),
         language=_language(payload.get("language", "auto")),
@@ -168,6 +216,7 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
         lasso_window_geometry=str(payload.get("lasso_window_geometry", "") or ""),
         pair_window_geometry=str(payload.get("pair_window_geometry", "") or ""),
         pair_viewer_geometry=str(payload.get("pair_viewer_geometry", "") or ""),
+        gps_repair_window_geometry=str(payload.get("gps_repair_window_geometry", "") or ""),
         lasso_load_target_after_move=bool(payload.get("lasso_load_target_after_move", False)),
         lasso_thumbnail_cache_mode=_cache_mode(payload.get("lasso_thumbnail_cache_mode", "ram")),
         lasso_thumbnail_workers=_clamped_int(payload.get("lasso_thumbnail_workers"), 8, 1, 12),
@@ -180,6 +229,8 @@ def _settings_from_payload(payload: dict[str, Any]) -> AppSettings:
         images=images,
         videos=videos,
         metadata=metadata,
+        gps_repair=gps_repair,
+        maps=maps,
     )
 
 

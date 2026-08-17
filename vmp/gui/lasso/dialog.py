@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ...core.i18n import tr
+from ...core.models import MapSettings
 from ..common.file_transfer import (
     parent_directory,
     perform_transfer,
@@ -101,6 +102,7 @@ class LassoDialog(QDialog):
         thumbnail_cache_mode: str = "ram",
         thumbnail_workers: int = 8,
         thumbnail_display_size: int = _THUMB_SIZE,
+        map_settings: MapSettings | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Reise-Lasso – Medien auswählen und verschieben"))
@@ -129,6 +131,7 @@ class LassoDialog(QDialog):
         self.load_target_after_move = load_target_after_move
         self.thumbnail_cache_mode = thumbnail_cache_mode if thumbnail_cache_mode in {"ram", "disk", "off"} else "ram"
         self.thumbnail_workers = max(1, min(12, int(thumbnail_workers)))
+        self._map_settings = map_settings if map_settings is not None else MapSettings()
 
         # Public results read by the caller after exec().
         self.moved_sources: list[Path] = []
@@ -206,7 +209,9 @@ class LassoDialog(QDialog):
         """Log the outcome of the map page load."""
         if ok:
             LOGGER.info("Lasso map: load finished OK")
+            self.map_provider_combo.setEnabled(True)
         else:
+            self.map_provider_combo.setEnabled(False)
             LOGGER.warning(
                 "Lasso map: load FAILED — check internet access to unpkg.com/tile.openstreetmap.org"
             )

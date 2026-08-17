@@ -6,6 +6,7 @@ from ...core.i18n import tr
 from ...core.logging_config import get_logger
 from ...core.models import MediaKind
 from ...pair_cleanup import find_pairs
+from ...metadata import has_gps
 from ...reports import missing_exif_rows
 from ..common.plan_display import human_size
 
@@ -81,4 +82,9 @@ class StatusStatsMixin:
             LOGGER.debug("Pair badge update failed", exc_info=True)
             count = 0
         self.pairs_button.set_badge_text(str(count))
+
+    def _update_missing_gps_badge(self) -> None:
+        """Show the number of scanned media files without usable coordinates."""
+        count = sum(not has_gps(result.metadata.tags) for result in self.results)
+        self.gps_repair_button.set_badge_text(str(count))
 

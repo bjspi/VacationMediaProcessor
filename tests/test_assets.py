@@ -17,6 +17,7 @@ REFERENCED_ASSETS = (
     "check.svg",
     "check_dark.svg",
     "gear.svg",
+    "gps_missing.svg",
     "lasso.svg",
     "pairs.svg",
     "rotate.svg",

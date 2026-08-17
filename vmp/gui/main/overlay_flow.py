@@ -4,18 +4,22 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog, QMessageBox
 
 from ...core.discovery import normalize_root
 from ...core.i18n import tr
 from ...core.logging_config import get_logger
 from ...core.settings import save_settings
-from ...metadata import gps_coordinates
+from ...gps_repair import GpsAssignment, GpsRepairReport, record_from_result
+from ...metadata import analyze_item, gps_coordinates
 from ...pair_cleanup import find_pairs
 from ..lasso.dialog import LassoDialog
 from ..lasso.map_view import webengine_available
 from ..lasso.trip_selection import TripRecord
 from ..pairs.dialog import PairCleanupDialog
+from ..gps.dialog import GpsRepairDialog
+from ..workers import GpsRepairWorker
 
 LOGGER = get_logger(__name__)
 
@@ -71,6 +75,7 @@ class OverlayFlowMixin:
             thumbnail_cache_mode=self.settings_model.lasso_thumbnail_cache_mode,
             thumbnail_workers=self.settings_model.lasso_thumbnail_workers,
             thumbnail_display_size=self.settings_model.lasso_thumbnail_display_size,
+            map_settings=self.settings_model.maps,
         )
         dialog.activePathsRemoved.connect(lambda paths: self._remove_active_paths([Path(path) for path in paths], tr("Reise-Lasso")))
         result = dialog.exec()
@@ -134,4 +139,115 @@ class OverlayFlowMixin:
             removed = self._remove_active_paths(deleted_paths, tr("Paare aufräumen"))
             LOGGER.info("Pair cleanup removed %s duplicates; %s remaining", removed, len(self.results))
             self._update_pairs_badge()
+
+    def open_gps_repair(self) -> None:
+        """Open the unified automatic/manual missing-GPS repair dialog."""
+        if self._has_running_work():
+            QMessageBox.information(
+                self,
+                tr("GPS ergänzen"),
+                tr("Bitte warte, bis die laufende Verarbeitung abgeschlossen ist."),
+            )
+            return
+        records = [record_from_result(result) for result in self.results]
+        if not any(not record.has_gps for record in records):
+            QMessageBox.information(self, tr("GPS ergänzen"), tr("Alle gescannten Dateien enthalten GPS-Positionen."))
+            return
+        dialog = GpsRepairDialog(
+            self,
+            records,
+            self.settings_model.gps_repair,
+            geometry=self.settings_model.gps_repair_window_geometry,
+            ffmpeg=self.settings_model.tools.ffmpeg,
+            thumbnail_workers=self.settings_model.lasso_thumbnail_workers,
+            thumbnail_cache_mode=self.settings_model.lasso_thumbnail_cache_mode,
+            map_settings=self.settings_model.maps,
+        )
+        self._gps_repair_dialog = dialog
+        dialog.applyRequested.connect(self._start_gps_repair)
+        dialog.exec()
+        self.settings_model.gps_repair_window_geometry = dialog.result_geometry()
+        save_settings(self.settings_model)
+        self._gps_repair_dialog = None
+        dialog.deleteLater()
+
+    def _start_gps_repair(self, assignments: list[GpsAssignment], create_backups: bool) -> None:
+        """Start the standalone writer in the main window's single worker slot."""
+        dialog = getattr(self, "_gps_repair_dialog", None)
+        if self._has_running_work():
+            if dialog is not None:
+                dialog.set_busy(False)
+            self._block_if_busy()
+            return
+        self._set_busy(True)
+        self.progress.setValue(0)
+        self.status_label.setText(tr("GPS-Daten werden geschrieben …"))
+        worker = GpsRepairWorker(assignments, self.settings_model, create_backups)
+        if dialog is not None:
+            worker.failed.connect(lambda _message: dialog.set_busy(False))
+        self._start_worker(worker, self._gps_repair_finished)
+
+    def _gps_repair_finished(self, report: GpsRepairReport) -> None:
+        """Fold verified GPS readbacks into the active results and table."""
+        LOGGER.info(
+            "GPS repair result received run_id=%s entries=%s changed=%s failed=%s",
+            report.run_id,
+            len(report.entries),
+            report.changed,
+            report.failed,
+        )
+        dialog = getattr(self, "_gps_repair_dialog", None)
+        try:
+            result_indices = {result.item.path.resolve(): index for index, result in enumerate(self.results)}
+            plan_rows = {plan.analysis.item.path.resolve(): row for row, plan in enumerate(self.plans)}
+            for entry in report.entries:
+                if entry.readback is None:
+                    continue
+                key = entry.assignment.target.path.resolve()
+                index = result_indices.get(key)
+                if index is None:
+                    continue
+                old_result = self.results[index]
+                refreshed = analyze_item(old_result.item, entry.readback, self.settings_model.metadata)
+                self.results[index] = refreshed
+                row = plan_rows.get(key)
+                if row is not None:
+                    self.plans[row].analysis = refreshed
+                    self._refresh_table_row(row)
+                if entry.backup_path is not None:
+                    self._backup_paths[old_result.item.path] = entry.backup_path
+            self._apply_table_filters()
+            self._update_missing_gps_badge()
+            self._set_busy(False)
+            self.status_label.setText(
+                tr("GPS-Reparatur: {changed} geschrieben, {failed} Fehler.").format(
+                    changed=report.changed, failed=report.failed
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - never let a Qt result slot abort the process
+            LOGGER.exception("Could not apply GPS repair result in the GUI")
+            self._set_busy(False)
+            if dialog is not None:
+                dialog.set_busy(False)
+            message = str(exc)
+            QTimer.singleShot(0, lambda: QMessageBox.critical(self, tr("Fehler"), message))
+            return
+
+        # Do not start a nested QMessageBox event loop while handling the
+        # worker's finished signal. Returning first lets QThread.quit and its
+        # deferred cleanup complete without re-entering the completion chain.
+        if dialog is not None:
+            QTimer.singleShot(0, lambda: self._deliver_gps_repair_report(dialog, report))
+
+    @staticmethod
+    def _deliver_gps_repair_report(dialog: GpsRepairDialog, report: GpsRepairReport) -> None:
+        """Deliver the dialog update outside the worker completion signal."""
+        try:
+            dialog.apply_report(report)
+        except Exception:  # noqa: BLE001 - Qt callbacks must never escape into qFatal
+            LOGGER.exception("Could not display GPS repair result")
+            try:
+                dialog.set_busy(False)
+            except RuntimeError:
+                LOGGER.debug("GPS repair dialog was already deleted")
 

@@ -10,8 +10,10 @@ vmp/
 ├─ core/                    # models, settings, logging, subprocess helpers, discovery
 ├─ timestamps/              # parsing.py · candidates.py · resolution.py
 ├─ metadata/                # __init__ (ExifTool read + analysis) · writing.py · gps.py
+├─ gps_repair.py            # Qt-free GPS records, clustering, interpolation, suggestions
+├─ map_providers.py          # centralized tile providers, validation, Leaflet configuration
 ├─ tools/                   # __init__ (ExifTool write) · image.py (NConvert) · video.py (FFmpeg)
-├─ pipeline/                # __init__ (facade) · shared.py · scan.py · apply.py
+├─ pipeline/                # __init__ (facade) · shared.py · scan.py · apply.py · gps_repair.py
 ├─ planner.py               # dry-run plan building
 ├─ pair_cleanup.py          # IMG_/IMG_E detection + pixel containment
 ├─ manifest.py · reports.py
@@ -26,6 +28,8 @@ vmp/
    │                        # media_table.py (controller), preview_pane.py
    ├─ lasso/                # dialog.py, ui.py, map_view.py, histogram.py, thumb_strip.py,
    │                        # transfer_worker.py, trip_selection.py, geocode.py
+   ├─ gps/                  # missing-GPS review dialog + draggable Leaflet map bridge
+   ├─ common/map_provider.py # shared provider picker + WebEngine switching helper
    └─ pairs/                # dialog.py, row.py, viewer.py, worker.py
 ```
 

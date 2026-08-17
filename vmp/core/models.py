@@ -68,6 +68,7 @@ class Phase(str, Enum):
     METADATA_WRITE = "metadata_write"
     RENAME = "rename"
     MANIFEST = "manifest"
+    GPS_REPAIR = "gps_repair"
 
 
 IMAGE_EXTENSIONS: frozenset[str] = frozenset({".jpg", ".jpeg", ".png", ".heic", ".heif"})
@@ -151,6 +152,31 @@ class MetadataSettings:
 
 
 @dataclass(slots=True)
+class GpsRepairSettings:
+    """Persistent confidence thresholds for GPS suggestion generation."""
+
+    single_safe_minutes: int = 2
+    pair_safe_minutes: int = 30
+    pair_safe_distance_km: float = 5.0
+    pair_safe_speed_kmh: float = 20.0
+    cluster_min_anchors: int = 3
+    cluster_min_span_minutes: int = 5
+    cluster_radius_m: int = 200
+    cluster_max_gap_minutes: int = 60
+    review_pair_max_hours: int = 4
+    review_pair_max_distance_km: float = 50.0
+    review_single_max_minutes: int = 30
+
+
+@dataclass(slots=True)
+class MapSettings:
+    """Shared map provider settings used by every map-based tool."""
+
+    provider: str = "osm"
+    mapy_api_key: str = ""
+
+
+@dataclass(slots=True)
 class AppSettings:
     """User-configurable application settings."""
 
@@ -168,6 +194,7 @@ class AppSettings:
     lasso_window_geometry: str = ""
     pair_window_geometry: str = ""
     pair_viewer_geometry: str = ""
+    gps_repair_window_geometry: str = ""
     lasso_load_target_after_move: bool = False
     lasso_thumbnail_cache_mode: str = "ram"
     lasso_thumbnail_workers: int = 8
@@ -180,6 +207,8 @@ class AppSettings:
     images: ImageSettings = field(default_factory=ImageSettings)
     videos: VideoSettings = field(default_factory=VideoSettings)
     metadata: MetadataSettings = field(default_factory=MetadataSettings)
+    gps_repair: GpsRepairSettings = field(default_factory=GpsRepairSettings)
+    maps: MapSettings = field(default_factory=MapSettings)
 
 
 @dataclass(slots=True)

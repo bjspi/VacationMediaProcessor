@@ -48,13 +48,13 @@ window.onerror = function(msg, src, line, col, err){
 };
 console.log('lasso map script start; Leaflet=' + (typeof L) + ' QWebChannel=' + (typeof QWebChannel));
 var map, drawn, markers = {}, bridge = null;
+__MAP_PROVIDER_JS__
 var DEFAULT = {color:'#2f6fed', fillColor:'#2f6fed', fillOpacity:0.7, radius:5, weight:1};
 function initMap(pts){
   console.log('initMap with ' + pts.length + ' points; Leaflet=' + (typeof L));
   if (typeof L === 'undefined'){ console.log('Leaflet NOT loaded (CDN blocked?)'); return; }
   map = L.map('map');
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+  setTileProvider(initialTileProvider);
   var renderer = L.canvas(), bounds = [];
   pts.forEach(function(p){
     var m = L.circleMarker([p.lat, p.lon], DEFAULT);

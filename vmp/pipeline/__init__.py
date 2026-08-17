@@ -6,6 +6,7 @@ the package's public API:
 * :mod:`vmp.pipeline.shared` — run ids, dirs, errors, progress
 * :mod:`vmp.pipeline.scan` — scan/plan phase
 * :mod:`vmp.pipeline.apply` — apply/maintenance phase
+* :mod:`vmp.pipeline.gps_repair` — standalone GPS metadata repair
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from .apply import (  # noqa: F401  # noqa: F401
     maintain_jpegs,
 )
 from .scan import scan_and_plan, scan_items_and_plan  # noqa: F401
+from .gps_repair import apply_gps_assignments, gps_write_arguments  # noqa: F401
 from .shared import (  # noqa: F401
     ApplyItemCallback,
     CancelCallback,

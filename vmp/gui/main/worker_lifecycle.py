@@ -22,10 +22,13 @@ class WorkerLifecycleMixin:
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self.on_progress)
-        worker.finished.connect(finished_slot)
-        worker.failed.connect(self.on_worker_failed)
+        # Request event-loop shutdown before scheduling potentially modal GUI
+        # result handlers. This prevents nested dialogs from re-entering the
+        # completion chain while the worker thread is still live.
         worker.finished.connect(thread.quit)
         worker.failed.connect(thread.quit)
+        worker.finished.connect(finished_slot)
+        worker.failed.connect(self.on_worker_failed)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         thread.finished.connect(self._clear_worker_refs)
@@ -113,4 +116,5 @@ class WorkerLifecycleMixin:
         self.missing_button.setEnabled(not busy and bool(actionable_plans))
         self.lasso_button.setEnabled(not busy and bool(self.results))
         self.pairs_button.setEnabled(not busy and bool(self.results))
+        self.gps_repair_button.setEnabled(not busy and bool(self.results))
 
