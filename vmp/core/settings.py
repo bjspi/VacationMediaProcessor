@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import asdict, fields, is_dataclass
 from datetime import datetime
@@ -87,7 +88,7 @@ def _safe_float(value: Any, default: float) -> float:
         number = float(value)
     except (TypeError, ValueError):
         return default
-    if number != number or number in {float("inf"), float("-inf")}:
+    if not math.isfinite(number):
         return default
     return number
 

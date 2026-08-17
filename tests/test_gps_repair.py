@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -25,7 +25,6 @@ from vmp.gps_repair import (
 )
 from vmp.metadata import gps_coordinates
 from vmp.pipeline.gps_repair import apply_gps_assignments, gps_write_arguments
-
 
 BASE = datetime(2026, 7, 1, 12, 0, 0)
 

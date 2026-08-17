@@ -18,8 +18,8 @@ from .apply import (  # noqa: F401  # noqa: F401
     apply_plans,
     maintain_jpegs,
 )
-from .scan import scan_and_plan, scan_items_and_plan  # noqa: F401
 from .gps_repair import apply_gps_assignments, gps_write_arguments  # noqa: F401
+from .scan import scan_and_plan, scan_items_and_plan  # noqa: F401
 from .shared import (  # noqa: F401
     ApplyItemCallback,
     CancelCallback,

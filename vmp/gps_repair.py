@@ -10,7 +10,13 @@ from enum import Enum
 from pathlib import Path
 
 from .core.i18n import tr
-from .core.models import AnalysisResult, Confidence, GpsRepairSettings, MediaKind, RawMetadata
+from .core.models import (
+    AnalysisResult,
+    Confidence,
+    GpsRepairSettings,
+    MediaKind,
+    RawMetadata,
+)
 from .metadata import gps_coordinates
 from .timestamps.parsing import get_first_str
 
@@ -450,7 +456,7 @@ def build_gps_suggestions(
         suggestions,
         key=lambda suggestion: (
             suggestion.target.local_dt is None,
-            suggestion.target.local_dt or datetime.max,
+            suggestion.target.local_dt.isoformat() if suggestion.target.local_dt else "",
             str(suggestion.target.path).casefold(),
         ),
     )

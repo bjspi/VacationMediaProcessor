@@ -14,11 +14,11 @@ from ...core.settings import save_settings
 from ...gps_repair import GpsAssignment, GpsRepairReport, record_from_result
 from ...metadata import analyze_item, gps_coordinates
 from ...pair_cleanup import find_pairs
+from ..gps.dialog import GpsRepairDialog
 from ..lasso.dialog import LassoDialog
 from ..lasso.map_view import webengine_available
 from ..lasso.trip_selection import TripRecord
 from ..pairs.dialog import PairCleanupDialog
-from ..gps.dialog import GpsRepairDialog
 from ..workers import GpsRepairWorker
 
 LOGGER = get_logger(__name__)
@@ -224,7 +224,7 @@ class OverlayFlowMixin:
                     changed=report.changed, failed=report.failed
                 )
             )
-        except Exception as exc:  # noqa: BLE001 - never let a Qt result slot abort the process
+        except Exception as exc:
             LOGGER.exception("Could not apply GPS repair result in the GUI")
             self._set_busy(False)
             if dialog is not None:
@@ -244,7 +244,7 @@ class OverlayFlowMixin:
         """Deliver the dialog update outside the worker completion signal."""
         try:
             dialog.apply_report(report)
-        except Exception:  # noqa: BLE001 - Qt callbacks must never escape into qFatal
+        except Exception:
             LOGGER.exception("Could not display GPS repair result")
             try:
                 dialog.set_busy(False)

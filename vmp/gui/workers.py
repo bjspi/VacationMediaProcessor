@@ -221,7 +221,7 @@ class GpsRepairWorker(QObject):
                 report.failed,
             )
             self.finished.emit(report)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             LOGGER.exception("GpsRepairWorker failed")
             self.failed.emit(str(exc))
 

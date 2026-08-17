@@ -29,7 +29,11 @@ from PyQt6.QtWidgets import (
 
 from ...core.i18n import tr
 from ...map_providers import leaflet_provider_script
-from ..common.map_provider import MapProviderCombo, apply_map_provider, configure_local_map_settings
+from ..common.map_provider import (
+    MapProviderCombo,
+    apply_map_provider,
+    configure_local_map_settings,
+)
 from ..common.theme import asset_path
 from .histogram import DayHistogramWidget
 from .map_view import MAP_HTML, MapBridge, qwebchannel_js

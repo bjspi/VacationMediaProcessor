@@ -5,10 +5,18 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QByteArray, QBuffer, QIODevice, QPoint, QSize, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import (
+    QBuffer,
+    QByteArray,
+    QIODevice,
+    QPoint,
+    QSize,
+    Qt,
+    QUrl,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QCloseEvent, QDesktopServices, QIcon, QImage
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -21,8 +29,8 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QSplitter,
     QSpinBox,
+    QSplitter,
     QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -32,7 +40,6 @@ from PyQt6.QtWidgets import (
 
 from ...core.i18n import tr
 from ...core.models import GpsRepairSettings, MapSettings
-from ...map_providers import leaflet_provider_script
 from ...gps_repair import (
     GpsAssignment,
     GpsRepairRecord,
@@ -43,12 +50,13 @@ from ...gps_repair import (
     build_gps_suggestions,
     surrounding_anchors,
 )
+from ...map_providers import leaflet_provider_script
 from ...metadata import gps_coordinates
-from ..common.theme import asset_path
-from ..common.thumbnails import ThumbRelay, ThumbnailService
 from ..common.map_provider import MapProviderCombo, apply_map_provider
+from ..common.theme import asset_path
+from ..common.thumbnails import ThumbnailService, ThumbRelay
 from ..lasso.map_view import qwebchannel_js, webengine_available
-from .map_view import configure_local_map_settings, GpsMapBridge, MAP_HTML
+from .map_view import MAP_HTML, GpsMapBridge, configure_local_map_settings
 
 LOGGER = logging.getLogger("vmp.gui.gps.dialog")
 _RELATIVE_GEOMETRY_PREFIX = "relative-v1:"
@@ -602,7 +610,12 @@ class GpsRepairDialog(QDialog):
             for path in suggestion.anchor_paths
             if path not in context_paths and path in records_by_path
         )
-        context.sort(key=lambda record: (record.local_dt is None, record.local_dt or datetime.max))
+        context.sort(
+            key=lambda record: (
+                record.local_dt is None,
+                record.local_dt.isoformat() if record.local_dt else "",
+            )
+        )
         thumbnail_records = [*context, suggestion.target]
         thumbnail_paths = {record.path for record in thumbnail_records}
         if thumbnail_paths != self._map_thumbnail_paths:

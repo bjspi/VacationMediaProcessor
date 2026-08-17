@@ -8,7 +8,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from ..common.map_provider import configure_local_map_settings
 
-__all__ = ["GpsMapBridge", "MAP_HTML", "configure_local_map_settings"]
+__all__ = ["MAP_HTML", "GpsMapBridge", "configure_local_map_settings"]
 
 
 MAP_HTML = """<!DOCTYPE html>

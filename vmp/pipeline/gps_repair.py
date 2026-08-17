@@ -152,7 +152,7 @@ def apply_gps_assignments(
                 raise RuntimeError("GPS-Readback stimmt nicht mit der gewünschten Position überein.")
             entry.readback = readback
             entry.success = True
-        except Exception as exc:  # noqa: BLE001 - isolate failures inside the batch
+        except Exception as exc:
             LOGGER.exception("GPS repair failed for %s", path)
             entry.error = str(exc)
             if entry.backup_path is not None and entry.backup_path.exists():
