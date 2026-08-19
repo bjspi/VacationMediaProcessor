@@ -198,6 +198,37 @@ def haversine_km(left: tuple[float, float], right: tuple[float, float]) -> float
     return EARTH_RADIUS_KM * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1.0 - value)))
 
 
+def is_valid_position(latitude: float, longitude: float) -> bool:
+    """Return whether a coordinate pair is a writable WGS84 position."""
+    return (
+        math.isfinite(latitude)
+        and math.isfinite(longitude)
+        and -90.0 <= latitude <= 90.0
+        and -180.0 <= longitude <= 180.0
+    )
+
+
+def normalize_position(latitude: float, longitude: float) -> tuple[float, float] | None:
+    """Return a valid WGS84 position, or None when the input is unusable.
+
+    Leaflet reports *unwrapped* longitudes: the tile layer repeats the world
+    horizontally, so a click or pin drag on the copy east of the dateline
+    arrives as e.g. ``200.0`` instead of ``-160.0``. Written unchanged that
+    would produce an out-of-range EXIF/ISO-6709 value no reader accepts, so
+    fold the longitude back into ``-180..180`` here. Latitude cannot be wrapped
+    meaningfully and is rejected instead.
+    """
+    if not (math.isfinite(latitude) and math.isfinite(longitude)):
+        return None
+    if not -90.0 <= latitude <= 90.0:
+        return None
+    # An already valid longitude is returned untouched: running it through the
+    # modulo would shift the last decimals and silently move a stored position.
+    if -180.0 <= longitude <= 180.0:
+        return (latitude, longitude)
+    return (latitude, ((longitude + 180.0) % 360.0) - 180.0)
+
+
 def interpolate_position(
     left: tuple[float, float], right: tuple[float, float], fraction: float
 ) -> tuple[float, float]:
@@ -473,6 +504,8 @@ __all__ = [
     "build_gps_suggestions",
     "haversine_km",
     "interpolate_position",
+    "is_valid_position",
+    "normalize_position",
     "record_from_result",
     "surrounding_anchors",
 ]

@@ -71,12 +71,19 @@ function bindExpandableAnchorTooltip(marker,content){
   marker.on('mouseout',resetPreview);
   marker.on('remove',resetPreview);
 }
+// Leaflet repeats the world horizontally, so a click or drag east of the
+// dateline yields a longitude outside -180..180. The marker stays where the
+// user put it, but Python only ever sees the canonical position.
+function reportPin(latlng){
+  var wrapped=latlng.wrap();
+  bridge.pin_moved(wrapped.lat,wrapped.lng);
+}
 function setPin(lat,lon,meta){
   if(!map){return;}
   pinMeta=meta||pinMeta||{};
   if(!pin){
     pin=L.marker([lat,lon],{draggable:true}).addTo(map);
-    pin.on('dragend',function(){var p=pin.getLatLng();bridge.pin_moved(p.lat,p.lng);});
+    pin.on('dragend',function(){reportPin(pin.getLatLng());});
   } else {pin.setLatLng([lat,lon]);}
   var content=mediaCard(pinMeta);
   if(pin.getTooltip()){pin.setTooltipContent(content);}
@@ -110,7 +117,7 @@ function init(){
   if(typeof L==='undefined'){report('leaflet_missing');return;}
   map=L.map('map');
   setTileProvider(initialTileProvider);
-  map.on('click',function(e){setPin(e.latlng.lat,e.latlng.lng,pinMeta);bridge.pin_moved(e.latlng.lat,e.latlng.lng);});
+  map.on('click',function(e){setPin(e.latlng.lat,e.latlng.lng,pinMeta);reportPin(e.latlng);});
   bridge.get_payload(function(raw){render(raw);report('ready');});
 }
 function connect(){

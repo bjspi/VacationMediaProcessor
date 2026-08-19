@@ -40,7 +40,7 @@ from ...core.processes import (
     resolve_executable,
 )
 from ...core.settings import load_settings, save_settings
-from ...metadata import analyze_item
+from ...metadata import analyze_item, carry_over_probe_fields
 from ...planner import build_plans
 from ...reports import export_excel_report, missing_exif_rows
 from ..common.dialogs import show_missing_exif_dialog
@@ -298,12 +298,7 @@ class MainWindow(
             refreshed = analyze_item(previous.item, previous.metadata, self.settings_model.metadata)
             # FFprobe may have enriched these fields after the ExifTool analysis;
             # a pure timestamp re-analysis must not discard that information.
-            refreshed.width = refreshed.width if refreshed.width is not None else previous.width
-            refreshed.height = refreshed.height if refreshed.height is not None else previous.height
-            refreshed.codec = refreshed.codec if refreshed.codec is not None else previous.codec
-            refreshed.fps = refreshed.fps if refreshed.fps is not None else previous.fps
-            refreshed.has_depth = refreshed.has_depth or previous.has_depth
-            refreshed_results.append(refreshed)
+            refreshed_results.append(carry_over_probe_fields(refreshed, previous))
         self.results = refreshed_results
 
     def _apply_style(self) -> None:

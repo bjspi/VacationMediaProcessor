@@ -12,7 +12,7 @@ from ...core.i18n import tr
 from ...core.logging_config import get_logger
 from ...core.settings import save_settings
 from ...gps_repair import GpsAssignment, GpsRepairReport, record_from_result
-from ...metadata import analyze_item, gps_coordinates
+from ...metadata import analyze_item, carry_over_probe_fields, gps_coordinates
 from ...pair_cleanup import find_pairs
 from ..gps.dialog import GpsRepairDialog
 from ..lasso.dialog import LassoDialog
@@ -208,7 +208,12 @@ class OverlayFlowMixin:
                 if index is None:
                     continue
                 old_result = self.results[index]
-                refreshed = analyze_item(old_result.item, entry.readback, self.settings_model.metadata)
+                # A GPS write only changes ExifTool tags, so re-analysis must
+                # keep the FFprobe-derived video fields the scan added.
+                refreshed = carry_over_probe_fields(
+                    analyze_item(old_result.item, entry.readback, self.settings_model.metadata),
+                    old_result,
+                )
                 self.results[index] = refreshed
                 row = plan_rows.get(key)
                 if row is not None:

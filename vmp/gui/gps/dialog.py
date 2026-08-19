@@ -48,6 +48,7 @@ from ...gps_repair import (
     GpsSuggestionMethod,
     GpsSuggestionStatus,
     build_gps_suggestions,
+    normalize_position,
     surrounding_anchors,
 )
 from ...map_providers import leaflet_provider_script
@@ -694,8 +695,14 @@ class GpsRepairDialog(QDialog):
         self.pin_apply_button.setEnabled(self._map_ready and self._draft_pin is not None and not self._busy)
 
     def _pin_moved(self, latitude: float, longitude: float) -> None:
-        self._draft_pin = (latitude, longitude)
-        self.coordinate_label.setText(f"{latitude:.6f}, {longitude:.6f}")
+        # The map already wraps repeated-world longitudes; normalize again so a
+        # value from the page can never reach the writer out of range.
+        position = normalize_position(latitude, longitude)
+        if position is None:
+            LOGGER.warning("Ignoring out-of-range map pin %s, %s", latitude, longitude)
+            return
+        self._draft_pin = position
+        self.coordinate_label.setText(f"{position[0]:.6f}, {position[1]:.6f}")
         self.pin_apply_button.setEnabled(not self._busy)
 
     def _apply_pin_to_selection(self) -> None:

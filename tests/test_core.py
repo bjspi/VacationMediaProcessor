@@ -48,6 +48,7 @@ from vmp.gui.settings_dialog import SettingsDialog
 from vmp.manifest import write_before_after_manifests
 from vmp.metadata import (
     analyze_item,
+    carry_over_probe_fields,
     evaluate_sanity,
     metadata_write_tags,
     resolve_timestamp,
@@ -62,8 +63,10 @@ from vmp.pipeline.scan import _enrich_video_with_ffprobe, _safe_frame_rate
 from vmp.planner import (
     build_plans,
     crf_for_video,
+    effective_video_bucket,
     video_bucket,
     video_bucket_label,
+    video_downscale_target,
     video_fps_limit,
 )
 from vmp.reports import (
@@ -668,6 +671,61 @@ class ScanPipelineTests(unittest.TestCase):
         self.assertEqual(executor_max_workers, [3])
         self.assertEqual([len(call.args[0]) for call in read_metadata_batch.call_args_list], [2, 2, 1])
         self.assertEqual([result.item.path.name for result in results], [f"img{index}.jpg" for index in range(5)])
+
+
+class ProbeFieldCarryOverTests(unittest.TestCase):
+    """Re-analysis must not drop what FFprobe added after the ExifTool pass."""
+
+    @staticmethod
+    def _result(**overrides) -> AnalysisResult:
+        root = Path("C:/trip")
+        item = MediaItem(root / "clip.mp4", root, MediaKind.VIDEO)
+        fields = {
+            "item": item,
+            "metadata": RawMetadata(str(item.path), {}),
+            "resolved": ResolvedTimestamp(None, None, None, Confidence.LOW),
+            "status": PlanStatus.OK,
+        }
+        return AnalysisResult(**{**fields, **overrides})
+
+    def test_ffprobe_fields_survive_a_pure_exiftool_reanalysis(self) -> None:
+        previous = self._result(width=3840, height=2160, codec="hevc", fps=59.94, has_depth=True)
+        refreshed = carry_over_probe_fields(self._result(), previous)
+
+        self.assertEqual(
+            (refreshed.width, refreshed.height, refreshed.codec, refreshed.fps),
+            (3840, 2160, "hevc", 59.94),
+        )
+        self.assertTrue(refreshed.has_depth)
+
+    def test_freshly_analyzed_values_win_over_the_previous_ones(self) -> None:
+        previous = self._result(width=1920, height=1080, codec="h264", fps=30.0)
+        refreshed = carry_over_probe_fields(
+            self._result(width=3840, height=2160, codec="hevc"), previous
+        )
+
+        self.assertEqual((refreshed.width, refreshed.height, refreshed.codec), (3840, 2160, "hevc"))
+        # analyze_item never derives fps, so it always comes from the scan.
+        self.assertEqual(refreshed.fps, 30.0)
+
+    def test_dropping_the_fields_would_reset_bucket_crf_and_fps_cap(self) -> None:
+        settings = AppSettings()
+        settings.videos.limit_to_fhd = True
+        settings.videos.limit_to_30_fps = True
+        stripped = self._result()
+        kept = carry_over_probe_fields(
+            self._result(), self._result(width=3840, height=2160, codec="hevc", fps=59.94)
+        )
+
+        self.assertEqual(effective_video_bucket(kept, settings), "FHD")
+        self.assertEqual(video_downscale_target(kept, settings), (1920, 1080))
+        self.assertEqual(video_fps_limit(kept, settings), 30)
+        # Without the carry-over the same 4K/60p clip looks like an FHD source
+        # that needs neither a downscale nor an fps cap.
+        self.assertIsNone(video_downscale_target(stripped, settings))
+        self.assertIsNone(video_fps_limit(stripped, settings))
+        self.assertEqual(video_bucket(stripped, settings), "FHD")
+        self.assertEqual(video_bucket(kept, settings), "4K")
 
 
 class SettingsPersistenceTests(unittest.TestCase):

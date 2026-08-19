@@ -12,7 +12,14 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from vmp.core.models import Confidence, GpsRepairSettings, MediaKind, RawMetadata
+from vmp.core.models import (
+    Confidence,
+    GpsRepairSettings,
+    MediaKind,
+    PlanStatus,
+    RawMetadata,
+)
+from vmp.core.processes import ProcessResult
 from vmp.core.settings import _settings_from_payload
 from vmp.gps_repair import (
     GpsAssignment,
@@ -22,11 +29,21 @@ from vmp.gps_repair import (
     GpsSuggestionMethod,
     GpsSuggestionStatus,
     build_gps_suggestions,
+    normalize_position,
 )
 from vmp.metadata import gps_coordinates
 from vmp.pipeline.gps_repair import apply_gps_assignments, gps_write_arguments
 
 BASE = datetime(2026, 7, 1, 12, 0, 0)
+
+
+UPDATED_STDOUT = "    1 image files updated\n"
+REFUSED_STDOUT = "    0 image files updated\n    1 image files unchanged\n"
+
+
+def exiftool_result(stdout: str = UPDATED_STDOUT) -> ProcessResult:
+    """Build the ExifTool process result the writer inspects."""
+    return ProcessResult(args=[], returncode=0, stdout=stdout, stderr="")
 
 
 def record(
@@ -123,6 +140,70 @@ class GpsMetadataTests(unittest.TestCase):
         self.assertIn("-EXIF:GPSLongitudeRef=W", png)
         self.assertEqual(video, ["-Keys:GPSCoordinates=+52.520000+013.405000/"])
 
+    def test_writer_uses_exif_for_heic_because_exiftool_refuses_keys(self) -> None:
+        # ExifTool silently declines "-Keys:GPSCoordinates" on HEIC/HEIF
+        # ("0 image files updated", exit 0), and photo viewers read EXIF GPS
+        # from a HEIC anyway.
+        for name in ("shot.heic", "shot.HEIF"):
+            with self.subTest(name=name):
+                args = gps_write_arguments(Path(name), 52.52, 13.405)
+                self.assertEqual(
+                    args,
+                    [
+                        "-EXIF:GPSLatitude=52.52000000",
+                        "-EXIF:GPSLatitudeRef=N",
+                        "-EXIF:GPSLongitude=13.40500000",
+                        "-EXIF:GPSLongitudeRef=E",
+                    ],
+                )
+
+    def test_refused_exiftool_write_fails_with_the_actual_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "photo.heic"
+            path.write_bytes(b"image")
+            target = GpsRepairRecord(path, root, MediaKind.IMAGE, BASE, Confidence.HIGH, False)
+            assignment = GpsAssignment(target, 52.52, 13.405, GpsSuggestionMethod.MANUAL)
+            empty = RawMetadata(str(path), {})
+            with patch("vmp.pipeline.gps_repair._read_one", return_value=empty), patch(
+                "vmp.pipeline.gps_repair.run_process",
+                return_value=exiftool_result(REFUSED_STDOUT),
+            ):
+                report = apply_gps_assignments(
+                    [assignment], _settings_from_payload({}), create_backups=False
+                )
+        self.assertEqual(report.changed, 0)
+        self.assertEqual(report.failed, 1)
+        self.assertIn("0 image files updated", report.entries[0].error)
+
+    def test_unwrapped_map_longitude_is_folded_back_into_range(self) -> None:
+        # Leaflet reports 200.0 for a click on the world copy east of the
+        # dateline; -160.0 is the same meridian.
+        self.assertEqual(normalize_position(48.0, 200.0), (48.0, -160.0))
+        self.assertEqual(normalize_position(48.0, -200.0), (48.0, 160.0))
+        # An in-range value must survive bit-for-bit, without modulo drift.
+        self.assertEqual(normalize_position(52.52, 13.405), (52.52, 13.405))
+        self.assertIsNone(normalize_position(91.0, 13.0))
+        self.assertIsNone(normalize_position(float("nan"), 13.0))
+
+    def test_out_of_range_assignment_is_rejected_before_any_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "photo.png"
+            path.write_bytes(b"image")
+            target = GpsRepairRecord(path, root, MediaKind.IMAGE, BASE, Confidence.HIGH, False)
+            assignment = GpsAssignment(target, 48.0, 200.0, GpsSuggestionMethod.MANUAL)
+            with patch("vmp.pipeline.gps_repair._read_one") as read_one, patch(
+                "vmp.pipeline.gps_repair.run_process"
+            ) as process:
+                report = apply_gps_assignments(
+                    [assignment], _settings_from_payload({}), create_backups=False
+                )
+        self.assertEqual(report.failed, 1)
+        self.assertIn("Ungültige Zielkoordinate", report.entries[0].error)
+        process.assert_not_called()
+        read_one.assert_not_called()
+
     def test_settings_load_and_clamp_gps_thresholds(self) -> None:
         settings = _settings_from_payload(
             {
@@ -159,7 +240,7 @@ class GpsMetadataTests(unittest.TestCase):
                 {"GPS:GPSLatitude": "52.52", "GPS:GPSLongitude": "13.405"},
             )
             with patch("vmp.pipeline.gps_repair._read_one", side_effect=[before, after]), patch(
-                "vmp.pipeline.gps_repair.run_process"
+                "vmp.pipeline.gps_repair.run_process", return_value=exiftool_result()
             ):
                 report = apply_gps_assignments(
                     [assignment],
@@ -184,7 +265,7 @@ class GpsMetadataTests(unittest.TestCase):
                 str(path), {"GPS:GPSLatitude": "52", "GPS:GPSLongitude": "13"}
             )
             with patch("vmp.pipeline.gps_repair._read_one", return_value=current), patch(
-                "vmp.pipeline.gps_repair.run_process"
+                "vmp.pipeline.gps_repair.run_process", return_value=exiftool_result()
             ) as process:
                 report = apply_gps_assignments(
                     [assignment], _settings_from_payload({}), create_backups=False
@@ -218,7 +299,7 @@ class GpsMetadataTests(unittest.TestCase):
             with patch(
                 "vmp.pipeline.gps_repair._read_one",
                 side_effect=[RuntimeError("broken"), before, after],
-            ), patch("vmp.pipeline.gps_repair.run_process"):
+            ), patch("vmp.pipeline.gps_repair.run_process", return_value=exiftool_result()):
                 report = apply_gps_assignments(
                     assignments, _settings_from_payload({}), create_backups=False
                 )
@@ -398,6 +479,22 @@ class GpsRepairDialogTests(unittest.TestCase):
         finally:
             dialog.close()
 
+    @patch("vmp.gui.gps.dialog.webengine_available", return_value=False)
+    def test_pin_from_the_page_is_wrapped_and_range_checked(self, _webengine) -> None:
+        from vmp.gui.gps.dialog import GpsRepairDialog
+
+        records = [record("anchor.jpg", 0, lat=52.0, lon=13.0), record("target.jpg", 5)]
+        dialog = GpsRepairDialog(None, records, GpsRepairSettings(), thumbnail_workers=0)
+        try:
+            dialog._pin_moved(48.0, 200.0)
+            self.assertEqual(dialog._draft_pin, (48.0, -160.0))
+
+            # A latitude cannot be wrapped; keep the previous draft instead.
+            dialog._pin_moved(120.0, 13.0)
+            self.assertEqual(dialog._draft_pin, (48.0, -160.0))
+        finally:
+            dialog.close()
+
 
 class GpsMapConfigurationTests(unittest.TestCase):
     def test_anchor_tooltip_expands_only_after_a_longer_hover(self) -> None:
@@ -407,6 +504,16 @@ class GpsMapConfigurationTests(unittest.TestCase):
         self.assertIn("bindExpandableAnchorTooltip(marker", MAP_HTML)
         self.assertIn("gps-media-expanded .gps-media-card img", MAP_HTML)
         self.assertIn("marker.on('mouseout',resetPreview)", MAP_HTML)
+
+    def test_map_reports_only_wrapped_pin_coordinates(self) -> None:
+        from vmp.gui.gps.map_view import MAP_HTML
+
+        # Leaflet hands out unwrapped longitudes on repeated world copies, so
+        # every path to the bridge must go through reportPin()/wrap().
+        self.assertIn("var wrapped=latlng.wrap();", MAP_HTML)
+        self.assertIn("reportPin(pin.getLatLng())", MAP_HTML)
+        self.assertIn("reportPin(e.latlng)", MAP_HTML)
+        self.assertEqual(MAP_HTML.count("bridge.pin_moved("), 1)
 
     def test_file_backed_map_may_load_leaflet_and_tiles(self) -> None:
         from unittest.mock import Mock, call
@@ -461,6 +568,67 @@ class GpsRepairCompletionTests(unittest.TestCase):
         self.assertEqual(len(callbacks), 1)
         callbacks[0]()
         flow._gps_repair_dialog.apply_report.assert_called_once_with(report)
+
+    def test_repairing_a_video_keeps_its_ffprobe_fields(self) -> None:
+        from unittest.mock import Mock
+
+        from vmp.core.models import (
+            AnalysisResult,
+            AppSettings,
+            MediaItem,
+            MediaPlan,
+            ResolvedTimestamp,
+        )
+        from vmp.gui.main.overlay_flow import OverlayFlowMixin
+
+        root = Path("C:/trip")
+        item = MediaItem(path=root / "clip.mp4", root=root, kind=MediaKind.VIDEO)
+        # ExifTool alone reports none of these for a typical MP4; the scan
+        # filled them in from FFprobe afterwards.
+        scanned = AnalysisResult(
+            item=item,
+            metadata=RawMetadata(str(item.path), {}),
+            resolved=ResolvedTimestamp(BASE, None, None, Confidence.HIGH),
+            status=PlanStatus.OK,
+            width=3840,
+            height=2160,
+            codec="hevc",
+            fps=59.94,
+        )
+
+        class Flow(OverlayFlowMixin):
+            pass
+
+        flow = Flow()
+        flow.results = [scanned]
+        flow.plans = [MediaPlan(analysis=scanned)]
+        flow._backup_paths = {}
+        flow.settings_model = AppSettings()
+        flow.status_label = Mock()
+        flow._set_busy = Mock()
+        flow._apply_table_filters = Mock()
+        flow._update_missing_gps_badge = Mock()
+        flow._refresh_table_row = Mock()
+        flow._gps_repair_dialog = None
+
+        target = GpsRepairRecord(item.path, root, MediaKind.VIDEO, BASE, Confidence.HIGH, False)
+        entry = GpsRepairEntryResult(
+            assignment=GpsAssignment(target, 52.52, 13.405, GpsSuggestionMethod.MANUAL),
+            success=True,
+            readback=RawMetadata(
+                str(item.path),
+                {"GPS:GPSLatitude": "52.52", "GPS:GPSLongitude": "13.405"},
+            ),
+        )
+        flow._gps_repair_finished(GpsRepairReport(run_id="run", entries=[entry]))
+
+        repaired = flow.results[0]
+        self.assertIsNot(repaired, scanned)
+        self.assertEqual(
+            (repaired.width, repaired.height, repaired.codec, repaired.fps),
+            (3840, 2160, "hevc", 59.94),
+        )
+        self.assertIs(flow.plans[0].analysis, repaired)
 
 
 if __name__ == "__main__":

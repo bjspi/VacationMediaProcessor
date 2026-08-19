@@ -224,6 +224,25 @@ def analyze_item(item: MediaItem, raw: RawMetadata, settings: MetadataSettings) 
     )
 
 
+def carry_over_probe_fields(refreshed: AnalysisResult, previous: AnalysisResult) -> AnalysisResult:
+    """Preserve FFprobe-derived fields across a pure ExifTool re-analysis.
+
+    :func:`analyze_item` only ever sees ExifTool tags. It never sets ``fps`` at
+    all, and for many containers it also leaves ``width``/``height``/``codec``
+    empty — the scan fills those in afterwards from FFprobe. Re-analysing an
+    item (after a settings change or a standalone metadata write) without
+    carrying them over would silently reset the resolution bucket to FHD, apply
+    the wrong CRF, and drop both the Full-HD downscale and the 30-FPS cap for
+    that video.
+    """
+    refreshed.width = refreshed.width if refreshed.width is not None else previous.width
+    refreshed.height = refreshed.height if refreshed.height is not None else previous.height
+    refreshed.codec = refreshed.codec if refreshed.codec is not None else previous.codec
+    refreshed.fps = refreshed.fps if refreshed.fps is not None else previous.fps
+    refreshed.has_depth = refreshed.has_depth or previous.has_depth
+    return refreshed
+
+
 def _detect_depth(tags: dict[str, Any]) -> bool:
     """Return True when the file carries an editable depth map / portrait blur.
 

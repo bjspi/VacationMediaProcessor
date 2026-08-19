@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from collections import defaultdict
 from datetime import datetime
@@ -17,6 +18,7 @@ from ..gps_repair import (
     GpsRepairEntryResult,
     GpsRepairReport,
     haversine_km,
+    is_valid_position,
 )
 from ..manifest import json_default
 from ..metadata import gps_coordinates, read_metadata_batch
@@ -25,7 +27,17 @@ from .shared import CancelCallback, ProgressCallback, backup_dir, make_run_id
 
 LOGGER = get_logger(__name__)
 READBACK_TOLERANCE_METRES = 2.0
-_QUICKTIME_LOCATION_SUFFIXES = {".heic", ".heif", ".mp4", ".mov", ".m4v"}
+
+# ExifTool writes the QuickTime ``Keys`` location atom only in real QuickTime
+# containers. HEIC/HEIF are ISO-BMFF based too, but ExifTool refuses the Keys
+# group for them: it prints "0 image files updated" and still exits 0, so the
+# write looks successful and only the readback would notice. Those still images
+# therefore go through the EXIF GPS tags, which is also what every photo viewer
+# reads from a HEIC.
+_QUICKTIME_LOCATION_SUFFIXES = {".mp4", ".mov", ".m4v"}
+
+# ExifTool reports a refused write on stdout instead of via its exit status.
+_EXIFTOOL_NO_UPDATE_RE = re.compile(r"^\s*0 image files updated", re.MULTILINE)
 
 
 def _iso6709(latitude: float, longitude: float) -> str:
@@ -43,6 +55,20 @@ def gps_write_arguments(path: Path, latitude: float, longitude: float) -> list[s
         f"-EXIF:GPSLongitude={abs(longitude):.8f}",
         f"-EXIF:GPSLongitudeRef={'E' if longitude >= 0 else 'W'}",
     ]
+
+
+def _require_exiftool_update(stdout: str, path: Path) -> None:
+    """Turn ExifTool's silent "nothing written" report into a real error.
+
+    A refused tag group leaves the file untouched with a zero exit status. The
+    readback would catch it, but only as a confusing coordinate mismatch, so
+    name the actual cause here instead.
+    """
+    if _EXIFTOOL_NO_UPDATE_RE.search(stdout or ""):
+        raise RuntimeError(
+            f"ExifTool hat {path.name} nicht verändert (0 image files updated); "
+            "das Dateiformat akzeptiert die verwendeten GPS-Tags nicht."
+        )
 
 
 def _relative_or_name(path: Path, root: Path) -> Path:
@@ -123,6 +149,11 @@ def apply_gps_assignments(
         report.entries.append(entry)
         _emit(progress_callback, index - 1, total, f"GPS: {path.name}")
         try:
+            if not is_valid_position(assignment.lat, assignment.lon):
+                raise RuntimeError(
+                    f"Ungültige Zielkoordinate {assignment.lat}, {assignment.lon}; "
+                    "erwartet werden -90..90 und -180..180."
+                )
             before = _read_one(assignment, settings)
             if before is None:
                 raise RuntimeError("ExifTool konnte die Datei vor dem Schreiben nicht lesen.")
@@ -144,7 +175,7 @@ def apply_gps_assignments(
             args = [settings.tools.exiftool, "-m", "-P", "-overwrite_original_in_place"]
             args.extend(gps_write_arguments(path, assignment.lat, assignment.lon))
             args.append(str(path))
-            run_process(args)
+            _require_exiftool_update(run_process(args).stdout, path)
             _restore_file_times(path, stat_result)
             readback = _read_one(assignment, settings)
             coords = gps_coordinates(readback.tags) if readback is not None else None
